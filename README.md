@@ -50,6 +50,21 @@ php artisan test          # unit + feature suites
 / `GOLDENS_PATH`. Regenerate either with the scripts in `taicode/restore-db/`
 (requires Docker + the 7.3GB `.bak`).
 
+### MySQL 8 (production parity)
+
+SQLite is the zero-setup dev default; MySQL 8 is the production target
+(docs/09). `api/compose.yaml` provides a matching local instance — the full
+golden gate passes identically on both:
+
+```bash
+cd api
+docker compose up -d
+export DB_CONNECTION=mysql DB_HOST=127.0.0.1 DB_PORT=3306 \
+       DB_DATABASE=tai_scoring DB_USERNAME=tai DB_PASSWORD='TaiLocal!2026'
+php artisan migrate --force && php artisan legacy:import
+php artisan goldens:verify   # 68/68 on MySQL 8
+```
+
 ## Build order (docs/00-INDEX)
 
 1. Repo + CI skeleton ✅

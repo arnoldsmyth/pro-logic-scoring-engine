@@ -1,0 +1,30 @@
+# Dev/parity database matching the production target (MySQL 8, docs/09).
+# SQLite remains the zero-setup default; run the golden gate against MySQL
+# with:
+#
+#   docker compose up -d
+#   DB_CONNECTION=mysql php artisan legacy:import
+#   DB_CONNECTION=mysql php artisan goldens:verify
+#
+# Credentials are local-dev only.
+services:
+  mysql:
+    image: mysql:8
+    container_name: tai-mysql
+    ports:
+      - "127.0.0.1:3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: TaiLocal!2026
+      MYSQL_DATABASE: tai_scoring
+      MYSQL_USER: tai
+      MYSQL_PASSWORD: TaiLocal!2026
+    volumes:
+      - tai-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pTaiLocal!2026"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  tai-mysql-data:
