@@ -54,9 +54,9 @@ php artisan test          # unit + feature suites
 
 1. Repo + CI skeleton ✅
 2. Legacy config import ✅ (`legacy:import`)
-3. Golden-master harness ✅ (`goldens:verify` — reports SKIP until the engine exists)
-4. Engine primitives + rule interpreter until **68/68 goldens pass** ← next
-5. API layer + access codes
+3. Golden-master harness ✅ (`goldens:verify`)
+4. Engine primitives + rule interpreter ✅ — **68/68 goldens pass, both result formats**
+5. API layer + access codes ← next
 6. Norm analytics
 7. Control panel
 8. pooled-v1 norms + docs polish

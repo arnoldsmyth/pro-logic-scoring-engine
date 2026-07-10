@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Scoring\Contracts\ScoringEngine;
-use App\Scoring\EngineNotImplemented;
 use App\Scoring\GoldenMaster\GoldenRepository;
 use App\Scoring\GoldenMaster\GoldenSession;
 use App\Scoring\GoldenMaster\ResultDiff;
@@ -69,18 +68,18 @@ class GoldensVerify extends Command
         $normSet = strtoupper($registration['gender'] ?? '') === 'F' ? 'female-legacy' : 'male-legacy';
 
         try {
-            $actual = $engine->score($registration, $session->tools(), ['full'], $normSet);
-        } catch (EngineNotImplemented $e) {
-            $this->line("<comment>SKIP</comment> {$session->sessionKey}: {$e->getMessage()}");
-
-            return false;
+            $actualKeys = $engine->score($registration, $session->tools(), ['full'], $normSet, 'keys');
+            $actualStrings = $engine->score($registration, $session->tools(), ['full'], $normSet, 'strings');
         } catch (Throwable $e) {
             $this->line("<error>ERR </error> {$session->sessionKey}: {$e->getMessage()}");
 
             return false;
         }
 
-        $diffs = ResultDiff::diff($session->expectedKeys(), $actual);
+        $diffs = [
+            ...ResultDiff::diff($session->expectedKeys(), $actualKeys),
+            ...ResultDiff::diff($session->expectedStrings(), $actualStrings),
+        ];
         if ($diffs === []) {
             $this->line("<info>PASS</info> {$session->sessionKey}");
 
