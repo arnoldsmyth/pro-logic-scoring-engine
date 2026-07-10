@@ -1,6 +1,6 @@
 # TAI Scoring Platform v2 — Master Index
 
-**Status: SPECIFICATION COMPLETE — DO NOT BUILD YET (no git repo exists as of 2026-07-10).**
+**Status: BUILD IN PROGRESS (repo created 2026-07-10). Phases 1–3 of the build order below are done: `api/` Laravel skeleton + CI, `legacy:import`, `goldens:verify` harness. Current phase: 4 (engine). Work tracked in beads (`bd ready`).**
 
 This doc set is written so a build agent can implement the system without re-deriving anything. Read in order for full context; each doc stands alone for its area.
 
