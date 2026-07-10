@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "pro_d_scoring_engine",
+  "project_id": "b72d28a4-b276-460d-a9a7-3f0b9fc21aa2"
+}

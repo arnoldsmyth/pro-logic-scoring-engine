@@ -21,3 +21,8 @@ taicode/restore-db/goldens/
 /api/storage/*.key
 /panel/node_modules/
 /panel/dist/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
