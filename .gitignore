@@ -1,0 +1,23 @@
+# --- NEVER COMMIT: PII, live credentials, proprietary legacy source ---
+# Legacy source tree + 7.3GB SQL Server .bak (source of truth stays local)
+taicode/original-source/
+# Extracted config CSVs contain live TAI web-service credentials
+taicode/restore-db/extracted/
+# Golden-master sessions contain real names/emails (PII)
+taicode/restore-db/goldens/
+
+# macOS
+.DS_Store
+
+# IDE / editor
+.idea/
+.vscode/
+
+# Dependencies & build output (Laravel/React, added in phase 1)
+/api/vendor/
+/api/node_modules/
+/api/.env
+/api/.env.*.local
+/api/storage/*.key
+/panel/node_modules/
+/panel/dist/
