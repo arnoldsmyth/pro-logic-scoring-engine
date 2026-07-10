@@ -10,7 +10,7 @@
 ## Hosting (either; keep 12-factor/containerized so both work)
 
 - **DigitalOcean App Platform** + Managed MySQL — git push → build → deploy. Simplest.
-- **Google Cloud Run** + Cloud SQL (MySQL) — if consolidating on Google. ("Firebase hosting" for Laravel = Cloud Run in practice; Firebase products stay a PRO-D-frontend concern.)
+- **Google Cloud Run** + Cloud SQL (MySQL) — if consolidating on Google. ("Firebase hosting" for Laravel = Cloud Run in practice; Firebase products stay the calling partner site's own concern.)
 
 ## Environments & CI
 

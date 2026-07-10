@@ -10,36 +10,13 @@ use RuntimeException;
  * mirrors a join in the legacy procs; tables keep their legacy names. All
  * data is cached per-instance — config is immutable at runtime.
  *
- * Version pinning: PROD 3.5 = VersionControl 18 → PackageVersion 27,
- * ProfileVersion 19, InsightScoreVersion 21 (docs/01). Tool versions resolve
- * through ToolVersionControl.
+ * Version-bundle selection (which PackageVersion/ProfileVersion/
+ * InsightScoreVersion a request scores against) is NOT hardcoded here — it
+ * comes from a product/access code (ProductCatalog), so this class stays
+ * agnostic to any one product.
  */
 class LegacyConfig
 {
-    public const VERSION_CONTROL_KEY = 18;
-
-    public const PACKAGE_VERSION_KEY = 27;
-
-    public const PROFILE_VERSION_KEY = 19;
-
-    public const INSIGHT_SCORE_VERSION_KEY = 21;
-
-    /**
-     * API tool name → ToolVersionKey for VersionControl 18. Confirmed against
-     * ToolVersionControl + ToolASP names + per-version question counts.
-     */
-    public const TOOL_VERSIONS = [
-        'reflections' => 29,
-        'personalmotivators' => 48,
-        'areamissions' => 47,
-        'abilitiesfilter' => 28,
-        'personalstyle' => 49,
-        'personalexpectations' => 13,
-        'person' => 26,
-        'role' => 27,
-        'organization' => 25,
-    ];
-
     /** ISO 639-1 → legacy Language.ID */
     public const LANGUAGES = ['en' => 1, 'fr' => 2, 'tr' => 3, 'pt' => 4];
 
@@ -94,37 +71,37 @@ class LegacyConfig
             ->all();
     }
 
-    /** @return list<object> Package rules in sp_ScorePackage order */
-    public function packageRules(): array
+    /** @return list<object> Package rules in sp_ScorePackage order, for the given product's PackageVersion */
+    public function packageRules(int $packageVersionKey): array
     {
-        return $this->cache['packageRules'] ??= DB::table('PackageRule as pr')
+        return $this->cache["packageRules.{$packageVersionKey}"] ??= DB::table('PackageRule as pr')
             ->join('PackageOut as po', 'po.PackageOutKey', '=', 'pr.PackageoutKey')
             ->join('PackageRuleType as prt', 'prt.PackageRuleType', '=', 'pr.PackageRuleTypeKey')
-            ->where('po.PackageVersionKey', self::PACKAGE_VERSION_KEY)
+            ->where('po.PackageVersionKey', $packageVersionKey)
             ->orderBy('po.PackageOutKey')->orderBy('pr.Sequence')
             ->get(['pr.PackageRuleKey as ruleKey', 'prt.StoredProcName as proc'])
             ->all();
     }
 
-    /** @return list<object> Profile rules in sp_ScoreProfile order */
-    public function profileRules(): array
+    /** @return list<object> Profile rules in sp_ScoreProfile order, for the given product's ProfileVersion */
+    public function profileRules(int $profileVersionKey): array
     {
-        return $this->cache['profileRules'] ??= DB::table('ProfileRule as pr')
+        return $this->cache["profileRules.{$profileVersionKey}"] ??= DB::table('ProfileRule as pr')
             ->join('ProfileOut as po', 'po.ProfileOutKey', '=', 'pr.ProfileOutKey')
             ->join('ProfileRuleType as prt', 'prt.ProfileRuleTypeKey', '=', 'pr.ProfileRuleTypeKey')
-            ->where('po.ProfileVersionKey', self::PROFILE_VERSION_KEY)
+            ->where('po.ProfileVersionKey', $profileVersionKey)
             ->orderBy('po.ProfileOutKey')->orderBy('pr.Sequence')
             ->get(['pr.ProfileRuleKey as ruleKey', 'prt.StoredProcName as proc'])
             ->all();
     }
 
-    /** @return list<object> Insight rules in sp_ScoreInsight order */
-    public function insightRules(): array
+    /** @return list<object> Insight rules in sp_ScoreInsight order, for the given product's InsightScoreVersion */
+    public function insightRules(int $insightScoreVersionKey): array
     {
-        return $this->cache['insightRules'] ??= DB::table('InsightRule as ir')
+        return $this->cache["insightRules.{$insightScoreVersionKey}"] ??= DB::table('InsightRule as ir')
             ->join('InsightOut as io', 'io.InsightOutKey', '=', 'ir.InsightOutKey')
             ->join('InsightRuleType as irt', 'irt.InsightRuleTypeKey', '=', 'ir.InsightRuleTypeKey')
-            ->where('io.InsightScoreVersionKey', self::INSIGHT_SCORE_VERSION_KEY)
+            ->where('io.InsightScoreVersionKey', $insightScoreVersionKey)
             ->orderBy('io.InsightOutKey')->orderBy('ir.Sequence')
             ->get(['ir.InsightRuleKey as ruleKey', 'irt.StoredProcName as proc'])
             ->all();

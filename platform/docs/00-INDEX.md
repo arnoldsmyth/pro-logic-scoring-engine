@@ -1,4 +1,4 @@
-# TAI Scoring Platform v2 — Master Index
+# Pro Scoring Platform v2 — Master Index
 
 **Status: BUILD IN PROGRESS (repo created 2026-07-10). Phases 1–4 of the build order below are done: `api/` Laravel skeleton + CI, `legacy:import`, `goldens:verify` harness, and the scoring engine — 68/68 golden masters reproduce exactly in BOTH result formats. Current phase: 5 (API layer + access codes). Work tracked in beads (`bd ready`).**
 
@@ -16,7 +16,7 @@ This doc set is written so a build agent can implement the system without re-der
 | [08-control-panel.md](08-control-panel.md) | Panel views; **under-the-hood documentation requirement**; audit trace UI |
 | [09-architecture-deployment.md](09-architecture-deployment.md) | Laravel 11 + MySQL 8 + React; DO/Cloud Run; CI; security; repo layout |
 | [10-verification.md](10-verification.md) | 68 golden masters; test harness (build FIRST); privacy rules |
-| [11-products-roadmap.md](11-products-roadmap.md) | PRO-D, Enneagram Map (CVA↔type mapping), MCS-Dev, GSS, Validation Report 3.0 |
+| [11-products-roadmap.md](11-products-roadmap.md) | Launch product, Enneagram Map (CVA↔type mapping), MCS-Dev, GSS, Validation Report 3.0 |
 | [12-open-questions.md](12-open-questions.md) | Open decisions + dated decisions log |
 
 ## Build order (when the repo exists)
@@ -29,4 +29,4 @@ This doc set is written so a build agent can implement the system without re-der
 - `../restore-db/` — replica scripts, `extracted/` config CSVs, `goldens/` test cases (**both stay out of git — PII + live credentials**).
 - `../original-source/` — legacy source, DB script, 7.3GB .bak, API instructions.
 - `../Technical Overviews/` — 2010/2019 validation documents (basis for 11 §6).
-- `../SPEC-TAI-SCORING-API.md` — superseded by this folder; kept for history.
+- `../SPEC-SUPERSEDED-SCORING-API.md` — superseded by this folder; kept for history.

@@ -22,5 +22,5 @@ Pooled norms serve clients that cannot collect gender (also note: US "within-gro
 
 ## Open policy decisions
 
-- Non-binary/unspecified gender: pooled norms are the mechanical answer; needs product/TAI sign-off (it changes scores vs gendered norms).
+- Non-binary/unspecified gender: pooled norms are the mechanical answer; needs product-owner sign-off (it changes scores vs gendered norms).
 - Promotion policy: who approves candidate→active, and the exact sample threshold.

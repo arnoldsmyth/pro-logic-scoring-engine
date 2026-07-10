@@ -35,7 +35,7 @@ class LegacyImport extends Command
         $path = $this->option('path') ?: config('scoring.legacy_extracted_path');
         if (! is_dir($path)) {
             $this->error("Extract directory not found: {$path}");
-            $this->line('Run taicode/restore-db/1-restore.sh + 2-extract.sh first, or pass --path / set LEGACY_EXTRACTED_PATH.');
+            $this->line('Run platform/restore-db/1-restore.sh + 2-extract.sh first, or pass --path / set LEGACY_EXTRACTED_PATH.');
 
             return self::FAILURE;
         }

@@ -1,10 +1,10 @@
 # --- NEVER COMMIT: PII, live credentials, proprietary legacy source ---
 # Legacy source tree + 7.3GB SQL Server .bak (source of truth stays local)
-taicode/original-source/
-# Extracted config CSVs contain live TAI web-service credentials
-taicode/restore-db/extracted/
+platform/original-source/
+# Extracted config CSVs contain live legacy web-service credentials
+platform/restore-db/extracted/
 # Golden-master sessions contain real names/emails (PII)
-taicode/restore-db/goldens/
+platform/restore-db/goldens/
 
 # macOS
 .DS_Store

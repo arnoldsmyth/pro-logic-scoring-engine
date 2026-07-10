@@ -25,7 +25,7 @@ class GoldensVerify extends Command
     {
         if (! $goldens->available()) {
             $this->warn("Goldens directory not found: {$goldens->path()}");
-            $this->line('Golden masters live outside git (PII). Set GOLDENS_PATH or run on a machine with taicode/restore-db/goldens/.');
+            $this->line('Golden masters live outside git (PII). Set GOLDENS_PATH or run on a machine with platform/restore-db/goldens/.');
 
             return self::INVALID;
         }

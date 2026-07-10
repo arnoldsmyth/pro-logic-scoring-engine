@@ -31,4 +31,4 @@ GET  /v2/reference/scopes                 scope → required tools → output fi
 
 ## Non-goals
 
-No report/PDF generation — data only. No client-facing file storage. No Firebase/Firestore coupling (that's the PRO-D frontend's own concern).
+No report/PDF generation — data only. No client-facing file storage. No Firebase/Firestore coupling (that's the calling partner site's own concern).

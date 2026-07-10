@@ -1,6 +1,6 @@
 # 12 — Open Questions & Decisions Log
 
-## Open (needs Arnold / TAI decision)
+## Open (needs Arnold decision)
 
 1. **Non-binary/unspecified gender policy** — pooled norms are the mechanical answer; changes scores vs gendered norms; needs product sign-off (06-norms.md).
 2. **Norm promotion policy** — approval owner + exact sample threshold (06-norms.md).

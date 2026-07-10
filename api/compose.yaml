@@ -10,21 +10,21 @@
 services:
   mysql:
     image: mysql:8
-    container_name: tai-mysql
+    container_name: scoring-mysql
     ports:
       - "127.0.0.1:3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: TaiLocal!2026
-      MYSQL_DATABASE: tai_scoring
-      MYSQL_USER: tai
-      MYSQL_PASSWORD: TaiLocal!2026
+      MYSQL_ROOT_PASSWORD: ScoringLocal!2026
+      MYSQL_DATABASE: scoring_engine
+      MYSQL_USER: scoring
+      MYSQL_PASSWORD: ScoringLocal!2026
     volumes:
-      - tai-mysql-data:/var/lib/mysql
+      - scoring-mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pTaiLocal!2026"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pScoringLocal!2026"]
       interval: 5s
       timeout: 3s
       retries: 20
 
 volumes:
-  tai-mysql-data:
+  scoring-mysql-data:

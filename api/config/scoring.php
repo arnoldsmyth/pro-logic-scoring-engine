@@ -4,6 +4,6 @@
 // credentials and goldens/ holds real PII, so neither may ever be committed
 // (docs/09, docs/10). CI without these directories skips the golden suite.
 return [
-    'legacy_extracted_path' => env('LEGACY_EXTRACTED_PATH', base_path('../taicode/restore-db/extracted')),
-    'goldens_path' => env('GOLDENS_PATH', base_path('../taicode/restore-db/goldens')),
+    'legacy_extracted_path' => env('LEGACY_EXTRACTED_PATH', base_path('../platform/restore-db/extracted')),
+    'goldens_path' => env('GOLDENS_PATH', base_path('../platform/restore-db/goldens')),
 ];

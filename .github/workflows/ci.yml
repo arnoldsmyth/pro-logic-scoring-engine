@@ -44,4 +44,4 @@ jobs:
             echo "::notice::Golden masters not available on this runner — suite skipped (see docs/10)."
           fi
         env:
-          GOLDENS_PATH: ${{ vars.GOLDENS_PATH || '/opt/tai-goldens' }}
+          GOLDENS_PATH: ${{ vars.GOLDENS_PATH || '/opt/scoring-goldens' }}

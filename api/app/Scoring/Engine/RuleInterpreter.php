@@ -6,10 +6,11 @@ use RuntimeException;
 
 /**
  * Port of the legacy rule-dispatch machinery: sp_ScoreTools/Package/Profile/
- * Insight cursors plus every primitive proc the live PROD 3.5 config invokes.
- * Each primitive method is a line-for-line translation of its stored
- * procedure (reference bodies: original-source/databasescript20260225.sql);
- * comments cite the semantic quirks that MUST be preserved for golden parity.
+ * Insight cursors plus every primitive proc the current live product config
+ * invokes (see ProductCatalog). Each primitive method is a line-for-line
+ * translation of its stored procedure (reference bodies:
+ * platform/original-source/databasescript20260225.sql); comments cite the
+ * semantic quirks that MUST be preserved for golden parity.
  */
 class RuleInterpreter
 {

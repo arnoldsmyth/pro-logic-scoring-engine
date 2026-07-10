@@ -2,15 +2,15 @@
 
 The engine is product-agnostic (04-scoring-engine.md); products are package data + content. Current and candidate products:
 
-## 1. PRO-D (v2 launch product)
+## 1. Launch product (access code `VC18`, ProductCatalog)
 
-The live product (legacy "PRO Development 3.5"). All scopes per 04. Full multilingual content en/fr/pt.
+The current live product — one entry in the engine's product catalog (04, 07), not a hardcoded identity. Its external/legacy name was "Professional Development"; the engine and codebase don't reference that name. All scopes per 04. Full multilingual content en/fr/pt.
 
 ## 2. Enneagram Map (derivative product — active concept)
 
 **Positioning:** a new take on the Enneagram. No wings — deliberately (owner judgment: wings are flawed). Any of the 9 types can appear in a person's top three. Where classic Enneagram reads motivation only, this product maps **motivation (M) + competency (C) + style/behavior (S)** per type — a richer, three-lens type profile.
 
-**The mapping already exists in TAI's own documentation** (2019 Technical Report/Validation Report — each CVA is explicitly assigned an Enneagram type, with an Enneagram wheel + "need" table):
+**The mapping already exists in the legacy vendor's own documentation** (2019 Technical Report/Validation Report, `Technical Overviews/` — each CVA is explicitly assigned an Enneagram type, with an Enneagram wheel + "need" table):
 
 | # | Enneagram type | CVA | Action phrase |
 |---|---|---|---|
@@ -32,7 +32,7 @@ The live product (legacy "PRO Development 3.5"). All scopes per 04. Full multili
 
 ## 3. MCS Development (TM) (dormant, revival = config)
 
-PROD minus reflections + minus Org/Person/Role ACT appendices; 73 of 79 outputs, 8 tools. Complete legacy kit (rules, 4-language templates, charts, C# classes); used on 7 projects. In v2: a scope preset / package. Decision pending.
+The launch product minus reflections + minus Org/Person/Role ACT appendices; 73 of 79 outputs, 8 tools. Complete legacy kit (rules, 4-language templates, charts, C# classes); used on 7 projects. In v2: a scope preset / package. Decision pending.
 
 ## 4. General Satisfaction Survey (dormant, trivial)
 
@@ -40,7 +40,7 @@ PROD minus reflections + minus Org/Person/Role ACT appendices; 73 of 79 outputs,
 
 ## 5. Not carrying forward
 
-Role Report (already absorbed into PROD 3.5; standalone version = packaging decision on existing data). Human Synergistics scales (orphaned labels; full build + third-party licensing — decommissioned).
+Role Report (already absorbed into the launch product's current version; standalone version = packaging decision on existing data). Human Synergistics scales (orphaned labels; full build + third-party licensing — decommissioned).
 
 ## 6. Validation Report 3.0 (recommended project)
 

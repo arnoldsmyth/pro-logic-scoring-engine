@@ -2,7 +2,7 @@
 
 ## Design principle (non-negotiable)
 
-Port the engine as a **data-driven rule interpreter**, exactly like the legacy design — NOT hardcoded PRO-D logic. A "product" (PRO-D, MCS Development, Enneagram Map, future instruments) is package data + content rows, zero engine code. See 11-products-roadmap.md for why this matters commercially.
+Port the engine as a **data-driven rule interpreter**, exactly like the legacy design — NOT hardcoded to any single product. A "product" (the launch assessment, MCS Development, Enneagram Map, future instruments) is package data + content rows plus an access-code catalog entry (07), zero engine code. See 11-products-roadmap.md for why this matters commercially.
 
 ## Pipeline (4 gated stages, from legacy sp_Score)
 
@@ -10,7 +10,7 @@ Port the engine as a **data-driven rule interpreter**, exactly like the legacy d
 
 Rule data model (migrate as-is from `restore-db/extracted/`): `{Tool,Package,Profile,Insight}Rule`, `*RuleType` (names the primitive), `*RuleParams`, `*RuleSource` (SrcType decode: TV=raw tool input via TROutKey, TO=ToolRuleKey, PO=PackageRuleKey, PR=ProfileRuleKey, IN=InsightRuleKey — rule keys, NOT *Out keys), `*Out` tables.
 
-## Primitives to implement (~15 used by PROD, plain PHP)
+## Primitives to implement (~15 used by the launch product, plain PHP)
 
 Aggregation: sum, sumResponseValue, average. Arithmetic: add/subtract/multiply/divide by constant or by another value. Conversion: convertResponse (recode via ResponseWeightDetails), convertPZSD (**gender-split norm lookup** — see below), calibratePZSD, convertPXI, pxiScore, pxiSpecificType, convertCCTMatrix, convertSCTMatrix, convertPXISCTMatrix, convertToolFramework, convertToArchetypeID. Selection: rankScaleOutput, top-3 selection, tie-break, boosts. Insight stage: key-code generation + content persistence only (no math).
 

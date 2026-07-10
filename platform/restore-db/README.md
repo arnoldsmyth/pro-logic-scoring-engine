@@ -14,13 +14,13 @@ Goal: bring the 7.3GB `TMS202602260457.bak` to life in a local Docker SQL Server
 Open Terminal and paste:
 
 ```bash
-bash "$HOME/Library/CloudStorage/Dropbox/2025 Fresh Start/Development/taicode/restore-db/1-restore.sh"
+bash "$HOME/Library/CloudStorage/Dropbox/2025 Fresh Start/Development/platform/restore-db/1-restore.sh"
 ```
 
 The restore of 7.3GB takes roughly 10–40 minutes (emulation is slow). When it finishes:
 
 ```bash
-bash "$HOME/Library/CloudStorage/Dropbox/2025 Fresh Start/Development/taicode/restore-db/2-extract.sh"
+bash "$HOME/Library/CloudStorage/Dropbox/2025 Fresh Start/Development/platform/restore-db/2-extract.sh"
 ```
 
 This writes the scoring config tables as CSVs into `restore-db/extracted/`. Then tell Claude it's done — the CSVs are readable from the project folder.

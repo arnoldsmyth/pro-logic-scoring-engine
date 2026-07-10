@@ -4,6 +4,7 @@ namespace App\Scoring;
 
 use App\Scoring\Contracts\ScoringEngine;
 use App\Scoring\Engine\LegacyConfig;
+use App\Scoring\Engine\ProductCatalog;
 use App\Scoring\Engine\ResultAssembler;
 use App\Scoring\Engine\RuleInterpreter;
 use App\Scoring\Engine\SessionState;
@@ -16,14 +17,18 @@ use RuntimeException;
  * masters (`php artisan goldens:verify`).
  *
  * Norm sets: 'male-legacy'/'female-legacy' reproduce the legacy gender-split
- * PZSD lookup; versioned norm sets arrive in phase 6 (docs/06).
+ * PZSD lookup; versioned norm sets arrive in phase 6 (docs/06). Which
+ * version bundle gets scored is selected by `$productCode` (ProductCatalog)
+ * — the engine has no hardcoded product.
  */
 class InterpreterEngine implements ScoringEngine
 {
     public function __construct(private readonly LegacyConfig $config) {}
 
-    public function score(array $registration, array $tools, array $scopes = ['full'], string $normSet = 'male-legacy', string $format = 'keys'): array
+    public function score(array $registration, array $tools, array $scopes = ['full'], string $normSet = 'male-legacy', string $format = 'keys', string $productCode = ProductCatalog::DEFAULT_CODE): array
     {
+        $product = ProductCatalog::get($productCode);
+
         // The norm set IS the gender table selection in legacy scoring;
         // callers pass the set matching the registrant's gender.
         $gender = match ($normSet) {
@@ -37,14 +42,14 @@ class InterpreterEngine implements ScoringEngine
             ?? throw new RuntimeException("Unsupported language '{$language}'");
 
         $state = new SessionState($gender, $languageKey);
-        $this->ingest($state, $tools, $languageKey);
+        $this->ingest($state, $tools, $languageKey, $product['toolVersions']);
 
         $interpreter = new RuleInterpreter($this->config, $state);
-        $toolVersionKeys = array_values(array_intersect_key(LegacyConfig::TOOL_VERSIONS, $tools));
+        $toolVersionKeys = array_values(array_intersect_key($product['toolVersions'], $tools));
         $interpreter->runStage('Tool', $this->config->toolRules($toolVersionKeys));
-        $interpreter->runStage('Package', $this->config->packageRules());
-        $interpreter->runStage('Profile', $this->config->profileRules());
-        $interpreter->runStage('Insight', $this->config->insightRules());
+        $interpreter->runStage('Package', $this->config->packageRules($product['packageVersionKey']));
+        $interpreter->runStage('Profile', $this->config->profileRules($product['profileVersionKey']));
+        $interpreter->runStage('Insight', $this->config->insightRules($product['insightScoreVersionKey']));
 
         $assembler = new ResultAssembler;
 
@@ -57,12 +62,14 @@ class InterpreterEngine implements ScoringEngine
      * question with Question.Sequence = q (mapping verified against replica
      * RawResponse data). Free-text tools (reflections) never enter
      * vwValueByScale — their values are not numeric.
+     *
+     * @param  array<string, int>  $toolVersions
      */
-    private function ingest(SessionState $state, array $tools, int $languageKey): void
+    private function ingest(SessionState $state, array $tools, int $languageKey, array $toolVersions): void
     {
         foreach ($tools as $tool => $responses) {
-            $toolVersionKey = LegacyConfig::TOOL_VERSIONS[$tool]
-                ?? throw new RuntimeException("Unknown tool '{$tool}'");
+            $toolVersionKey = $toolVersions[$tool]
+                ?? throw new RuntimeException("Unknown tool '{$tool}' for this product");
             if ($tool === 'reflections') {
                 continue;
             }
