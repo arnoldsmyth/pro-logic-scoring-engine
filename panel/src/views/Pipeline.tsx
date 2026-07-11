@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { get } from '../api'
-import { Badge, Card, Explainer, Table } from '../components/ui'
+import { DataTable } from '../components/DataTable'
+import { Badge, Card, Explainer } from '../components/ui'
 
 type PipelineData = {
   product: string
@@ -66,19 +67,26 @@ export default function Pipeline() {
       </Card>
 
       <Card title="Scope → required tools (dependency matrix)">
-        <Table head={['Scope', 'Required tools (questions)', 'Gender-split norms']}>
-          {Object.entries(data.dependency_matrix).map(([scope, spec]) => (
-            <tr key={scope}>
-              <td className="px-3 py-2"><code className="font-medium text-gray-700">{scope}</code></td>
-              <td className="px-3 py-2 text-xs text-gray-600">
-                {spec.required_tools.map((t) => `${t} (${data.tool_question_counts[t] ?? '?'})`).join(', ')}
-              </td>
-              <td className="px-3 py-2">
-                {spec.uses_gender_split_norms ? <Badge tone="amber">yes — S/P dimensions</Badge> : <Badge tone="gray">no</Badge>}
-              </td>
-            </tr>
-          ))}
-        </Table>
+        <DataTable
+          rows={Object.entries(data.dependency_matrix)}
+          rowKey={([scope]) => scope}
+          columns={[
+            { header: 'Scope', primary: true, cell: ([scope]) => <code className="font-medium text-gray-700">{scope}</code> },
+            {
+              header: 'Required tools (questions)',
+              cell: ([, spec]) => (
+                <span className="text-xs">
+                  {spec.required_tools.map((t) => `${t} (${data.tool_question_counts[t] ?? '?'})`).join(', ')}
+                </span>
+              ),
+            },
+            {
+              header: 'Gender-split norms',
+              cell: ([, spec]) =>
+                spec.uses_gender_split_norms ? <Badge tone="amber">yes — S/P dimensions</Badge> : <Badge tone="gray">no</Badge>,
+            },
+          ]}
+        />
         <p className="mt-3 text-xs text-gray-400">
           S is anchored on the person tool, so full mcs needs all six self tools; P is computed from M+C+S, not from
           the person tool alone; role and org stand alone; reflections are echoed verbatim, never scored.

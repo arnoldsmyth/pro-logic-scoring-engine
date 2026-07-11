@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { get } from '../api'
-import { Badge, Button, Card, Explainer, Field, Table, inputClass } from '../components/ui'
+import { DataTable, type Column } from '../components/DataTable'
+import { Badge, Button, Card, Explainer, Field, inputClass } from '../components/ui'
 
 type Row = {
   public_id: string
@@ -81,23 +82,22 @@ export default function Assessments() {
       </Card>
 
       <Card title={`Assessments (${rows.length})`}>
-        <Table head={['External id', 'Name', 'Email', 'Lang', 'Key', 'Tools', 'Scored', 'Created', '']}>
-          {rows.map((r) => (
-            <tr key={r.public_id}>
-              <td className="px-3 py-2 text-xs text-gray-600">{r.external_id ?? '—'}</td>
-              <td className="px-3 py-2 font-medium text-gray-700">{r.name}</td>
-              <td className="px-3 py-2 text-gray-500">{r.email}</td>
-              <td className="px-3 py-2 text-gray-500">{r.language}</td>
-              <td className="px-3 py-2 text-xs text-gray-500">{r.api_key}</td>
-              <td className="px-3 py-2 text-gray-600">{r.tools_submitted}/9</td>
-              <td className="px-3 py-2 text-gray-600">{r.times_scored}×</td>
-              <td className="px-3 py-2 text-xs text-gray-500">{r.created_at.slice(0, 10)}</td>
-              <td className="px-3 py-2">
-                <Button kind="secondary" onClick={() => open(r.public_id)}>Open</Button>
-              </td>
-            </tr>
-          ))}
-        </Table>
+        <DataTable
+          rows={rows}
+          rowKey={(r) => r.public_id}
+          empty="No assessments match."
+          columns={[
+            { header: 'Name', primary: true, cell: (r) => <span className="font-medium text-gray-700">{r.name}</span> },
+            { header: 'External id', cell: (r) => <span className="text-xs">{r.external_id ?? '—'}</span> },
+            { header: 'Email', cell: (r) => r.email },
+            { header: 'Lang', cell: (r) => r.language },
+            { header: 'Key', cell: (r) => <span className="text-xs">{r.api_key}</span> },
+            { header: 'Tools', cell: (r) => `${r.tools_submitted}/9` },
+            { header: 'Scored', cell: (r) => `${r.times_scored}×` },
+            { header: 'Created', cell: (r) => <span className="text-xs">{r.created_at.slice(0, 10)}</span> },
+          ] satisfies Column<Row>[]}
+          actions={(r) => <Button kind="secondary" onClick={() => open(r.public_id)}>Open</Button>}
+        />
       </Card>
 
       {detail && (

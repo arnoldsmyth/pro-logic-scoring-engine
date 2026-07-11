@@ -81,29 +81,6 @@ export function Bars({ data, height = 96 }: { data: Record<string, number>; heig
   )
 }
 
-/**
- * Responsive table: horizontal scroll with momentum on small screens,
- * comfortable row height for touch, sticky header for long lists.
- */
-export function Table({ head, children }: { head: string[]; children: ReactNode }) {
-  return (
-    <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-      <table className="w-full min-w-max text-sm sm:min-w-full">
-        <thead>
-          <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
-            {head.map((h, i) => (
-              <th key={i} className="whitespace-nowrap px-3 py-2 font-medium">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">{children}</tbody>
-      </table>
-    </div>
-  )
-}
-
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block text-sm">

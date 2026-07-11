@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { get, patch, post } from '../api'
 import { useAuth } from '../auth'
-import { Badge, Button, Card, Explainer, Field, Table, inputClass } from '../components/ui'
+import { DataTable, type Column } from '../components/DataTable'
+import { Badge, Button, Card, Explainer, Field, inputClass } from '../components/ui'
 
 type Key = {
   id: number
@@ -81,30 +82,29 @@ export default function Keys() {
       )}
 
       <Card title="Keys">
-        <Table head={['Name', 'Token', 'Rate/min', 'Default code', 'Webhook', 'Usage', 'Last used', 'Status', '']}>
-          {keys.map((k) => (
-            <tr key={k.id}>
-              <td className="px-3 py-2 font-medium text-gray-700">{k.name}</td>
-              <td className="px-3 py-2"><code className="text-xs text-gray-500">{k.key_prefix}</code></td>
-              <td className="px-3 py-2 text-gray-600">{k.rate_limit_per_minute}</td>
-              <td className="px-3 py-2 text-xs text-gray-500">{k.default_access_code ?? '—'}</td>
-              <td className="px-3 py-2 text-xs text-gray-500">{k.webhook_url ? 'yes' : '—'}</td>
-              <td className="px-3 py-2 text-gray-600">{k.usage_events}</td>
-              <td className="px-3 py-2 text-xs text-gray-500">{k.last_used_at?.slice(0, 10) ?? 'never'}</td>
-              <td className="px-3 py-2">{k.active ? <Badge tone="green">active</Badge> : <Badge tone="red">revoked</Badge>}</td>
-              <td className="px-3 py-2">
-                {isAdmin && (
-                  <span className="flex gap-2">
-                    <Button kind="secondary" onClick={() => rotate(k.id)}>Rotate</Button>
-                    <Button kind={k.active ? 'danger' : 'secondary'} onClick={() => toggle(k)}>
-                      {k.active ? 'Revoke' : 'Restore'}
-                    </Button>
-                  </span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </Table>
+        <DataTable
+          rows={keys}
+          rowKey={(k) => k.id}
+          empty="No API keys issued yet."
+          columns={[
+            { header: 'Name', primary: true, cell: (k) => <span className="font-medium text-gray-700">{k.name}</span> },
+            { header: 'Token', cell: (k) => <code className="text-xs text-gray-500">{k.key_prefix}</code> },
+            { header: 'Rate/min', cell: (k) => k.rate_limit_per_minute },
+            { header: 'Default code', cell: (k) => <span className="text-xs">{k.default_access_code ?? '—'}</span> },
+            { header: 'Webhook', cell: (k) => <span className="text-xs">{k.webhook_url ? 'yes' : '—'}</span> },
+            { header: 'Usage', cell: (k) => k.usage_events },
+            { header: 'Last used', cell: (k) => <span className="text-xs">{k.last_used_at?.slice(0, 10) ?? 'never'}</span> },
+            { header: 'Status', cell: (k) => (k.active ? <Badge tone="green">active</Badge> : <Badge tone="red">revoked</Badge>) },
+          ] satisfies Column<Key>[]}
+          actions={isAdmin ? (k) => (
+            <span className="flex gap-2">
+              <Button kind="secondary" onClick={() => rotate(k.id)}>Rotate</Button>
+              <Button kind={k.active ? 'danger' : 'secondary'} onClick={() => toggle(k)}>
+                {k.active ? 'Revoke' : 'Restore'}
+              </Button>
+            </span>
+          ) : undefined}
+        />
       </Card>
     </div>
   )

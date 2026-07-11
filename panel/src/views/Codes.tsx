@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { get, post } from '../api'
 import { useAuth } from '../auth'
-import { Badge, Button, Card, Explainer, Field, Table, inputClass } from '../components/ui'
-import { CODE_TYPE_LABELS } from '../labels'
+import { DataTable, type Column } from '../components/DataTable'
+import { Badge, Button, Card, Explainer, Field, inputClass } from '../components/ui'
+import { CODE_TYPE_LABELS, SCOPE_LABELS } from '../labels'
 
 type Term = { id: number; recipient: string; kind: string; amount: string; currency: string; active: boolean }
 type Code = {
@@ -32,7 +33,8 @@ export default function Codes() {
   const isAdmin = user?.role === 'admin'
   const [codes, setCodes] = useState<Code[]>([])
   const [statement, setStatement] = useState<Statement | null>(null)
-  const [form, setForm] = useState({ type: 'training', scopes: 'full', issued_to: '', count: '1' })
+  const [form, setForm] = useState({ type: 'training', issued_to: '', count: '1' })
+  const [scopes, setScopes] = useState<string[]>(['full'])
   const [issued, setIssued] = useState<string[]>([])
 
   const load = () => {
@@ -41,11 +43,23 @@ export default function Codes() {
   }
   useEffect(load, [])
 
+  // 'full' is exclusive: it grants everything, so picking it clears the
+  // rest, and picking anything specific drops 'full'.
+  const toggleScope = (scope: string) => {
+    setScopes((current) => {
+      if (scope === 'full') return ['full']
+      const next = current.includes(scope)
+        ? current.filter((s) => s !== scope)
+        : [...current.filter((s) => s !== 'full'), scope]
+      return next.length === 0 ? ['full'] : next
+    })
+  }
+
   const issue = async () => {
     const r = await post<{ codes: string[] }>('/codes', {
       type: form.type,
       product_code: 'VC18',
-      allowed_scopes: form.scopes.split(',').map((s) => s.trim()),
+      allowed_scopes: scopes,
       issued_to: form.issued_to || null,
       count: Number(form.count),
     })
@@ -98,6 +112,32 @@ export default function Codes() {
 
       {isAdmin && (
         <Card title="Issue codes">
+          <div className="mb-4">
+            <span className="mb-1 block text-sm font-medium text-gray-600">Allowed scopes</span>
+            <p className="mb-2 text-xs text-gray-400">
+              What the code's holder may score. "Full" grants everything; pick specific scopes to narrow it.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(SCOPE_LABELS).map(([value, label]) => {
+                const selected = scopes.includes(value)
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleScope(value)}
+                    aria-pressed={selected}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition-colors ${
+                      selected
+                        ? 'bg-sky-600 text-white ring-sky-600'
+                        : 'bg-white text-gray-600 ring-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {label} <code className={selected ? 'text-sky-100' : 'text-gray-400'}>{value}</code>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Type">
               <select className={inputClass} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
@@ -105,9 +145,6 @@ export default function Codes() {
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
-            </Field>
-            <Field label="Allowed scopes (comma-sep)">
-              <input className={inputClass} value={form.scopes} onChange={(e) => setForm({ ...form, scopes: e.target.value })} />
             </Field>
             <Field label="Issued to">
               <input className={inputClass} value={form.issued_to} onChange={(e) => setForm({ ...form, issued_to: e.target.value })} />
@@ -128,26 +165,29 @@ export default function Codes() {
       )}
 
       <Card title="Codes">
-        <Table head={['Code', 'Type', 'Scopes', 'Issued to', 'Uses', 'Terms', 'Status']}>
-          {codes.map((c) => (
-            <tr key={c.id}>
-              <td className="px-3 py-2"><code className="text-xs text-gray-600">{c.code}</code></td>
-              <td className="px-3 py-2"><Badge tone={typeTone[c.type]}>{c.type}</Badge></td>
-              <td className="px-3 py-2 text-xs text-gray-500">{c.allowed_scopes.join(', ')}</td>
-              <td className="px-3 py-2 text-gray-600">{c.issued_to ?? '—'}</td>
-              <td className="px-3 py-2 text-gray-600">
-                {c.uses_count}
-                {c.max_uses !== null && ` / ${c.max_uses}`}
-              </td>
-              <td className="px-3 py-2 text-xs text-gray-500">
-                {c.royalty_terms.length === 0
-                  ? c.type === 'derivative' ? 'none (derivative)' : 'none'
-                  : c.royalty_terms.map((t) => `${t.recipient}: ${t.amount} ${t.currency}${t.active ? '' : ' (ended)'}`).join('; ')}
-              </td>
-              <td className="px-3 py-2">{c.active ? <Badge tone="green">active</Badge> : <Badge tone="red">revoked</Badge>}</td>
-            </tr>
-          ))}
-        </Table>
+        <DataTable
+          rows={codes}
+          rowKey={(c) => c.id}
+          empty="No access codes issued yet."
+          columns={[
+            { header: 'Code', primary: true, cell: (c) => <code className="text-xs text-gray-600">{c.code}</code> },
+            { header: 'Type', cell: (c) => <Badge tone={typeTone[c.type]}>{c.type}</Badge> },
+            { header: 'Scopes', cell: (c) => <span className="text-xs">{c.allowed_scopes.join(', ')}</span> },
+            { header: 'Issued to', cell: (c) => c.issued_to ?? '—' },
+            { header: 'Uses', cell: (c) => `${c.uses_count}${c.max_uses !== null ? ` / ${c.max_uses}` : ''}` },
+            {
+              header: 'Terms',
+              cell: (c) => (
+                <span className="text-xs">
+                  {c.royalty_terms.length === 0
+                    ? c.type === 'derivative' ? 'none (derivative)' : 'none'
+                    : c.royalty_terms.map((t) => `${t.recipient}: ${t.amount} ${t.currency}${t.active ? '' : ' (ended)'}`).join('; ')}
+                </span>
+              ),
+            },
+            { header: 'Status', cell: (c) => (c.active ? <Badge tone="green">active</Badge> : <Badge tone="red">revoked</Badge>) },
+          ] satisfies Column<Code>[]}
+        />
       </Card>
     </div>
   )

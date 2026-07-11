@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { get, post } from '../api'
 import { useAuth } from '../auth'
-import { Badge, Button, Card, Explainer, Table } from '../components/ui'
+import { DataTable, type Column } from '../components/DataTable'
+import { Badge, Button, Card, Explainer } from '../components/ui'
 
 type NormSet = {
   id: number
@@ -75,44 +76,56 @@ export default function Norms() {
       {error && <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
       <Card title="Norm sets">
-        <Table head={['Slug', 'Status', 'Population', 'Entries', 'Impact report', 'Activated', '']}>
-          {sets.map((s) => (
-            <tr key={s.id}>
-              <td className="px-3 py-2">
-                <code className="font-medium text-gray-700">{s.slug}</code>
-                {s.provisional && <span className="ml-2"><Badge tone="amber">provisional</Badge></span>}
-              </td>
-              <td className="px-3 py-2"><Badge tone={statusTone[s.status]}>{s.status}</Badge></td>
-              <td className="px-3 py-2 text-gray-600">
-                {s.language ?? 'all languages'} / {s.gender ?? 'pooled'}
-              </td>
-              <td className="px-3 py-2 text-gray-600">{s.entries}</td>
-              <td className="px-3 py-2 text-xs text-gray-500">
-                {s.impact
-                  ? `${s.impact.pct_changed}% top-3 change vs ${s.impact.baseline} (n=${s.impact.assessments_compared})`
-                  : '—'}
-              </td>
-              <td className="px-3 py-2 text-xs text-gray-500">{s.activated_at?.slice(0, 10) ?? '—'}</td>
-              <td className="px-3 py-2">
-                {isAdmin && s.status === 'candidate' && (
-                  <span className="flex gap-2">
-                    <Button kind="secondary" disabled={busy === s.slug} onClick={() => act(s.slug, 'impact')}>
-                      {busy === s.slug ? 'Working…' : 'Run impact'}
-                    </Button>
-                    <Button disabled={busy === s.slug || s.impact === null} onClick={() => act(s.slug, 'promote')}>
-                      Promote
-                    </Button>
-                  </span>
-                )}
-                {isAdmin && s.status === 'active' && !s.slug.endsWith('-legacy') && (
-                  <Button kind="danger" disabled={busy === s.slug} onClick={() => act(s.slug, 'retire')}>
-                    Retire
+        <DataTable
+          rows={sets}
+          rowKey={(n) => n.id}
+          empty="No norm sets registered."
+          columns={[
+            {
+              header: 'Slug',
+              primary: true,
+              cell: (n) => (
+                <>
+                  <code className="font-medium text-gray-700">{n.slug}</code>
+                  {n.provisional && <span className="ml-2"><Badge tone="amber">provisional</Badge></span>}
+                </>
+              ),
+            },
+            { header: 'Status', cell: (n) => <Badge tone={statusTone[n.status]}>{n.status}</Badge> },
+            { header: 'Population', cell: (n) => `${n.language ?? 'all languages'} / ${n.gender ?? 'pooled'}` },
+            { header: 'Entries', cell: (n) => n.entries },
+            {
+              header: 'Impact report',
+              cell: (n) => (
+                <span className="text-xs">
+                  {n.impact
+                    ? `${n.impact.pct_changed}% top-3 change vs ${n.impact.baseline} (n=${n.impact.assessments_compared})`
+                    : '—'}
+                </span>
+              ),
+            },
+            { header: 'Activated', cell: (n) => <span className="text-xs">{n.activated_at?.slice(0, 10) ?? '—'}</span> },
+          ] satisfies Column<NormSet>[]}
+          actions={(n) => (
+            <>
+              {isAdmin && n.status === 'candidate' && (
+                <span className="flex gap-2">
+                  <Button kind="secondary" disabled={busy === n.slug} onClick={() => act(n.slug, 'impact')}>
+                    {busy === n.slug ? 'Working…' : 'Run impact'}
                   </Button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </Table>
+                  <Button disabled={busy === n.slug || n.impact === null} onClick={() => act(n.slug, 'promote')}>
+                    Promote
+                  </Button>
+                </span>
+              )}
+              {isAdmin && n.status === 'active' && !n.slug.endsWith('-legacy') && (
+                <Button kind="danger" disabled={busy === n.slug} onClick={() => act(n.slug, 'retire')}>
+                  Retire
+                </Button>
+              )}
+            </>
+          )}
+        />
       </Card>
 
       <Card title="Sample accumulation by population">
