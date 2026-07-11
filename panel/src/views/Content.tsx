@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { get } from '../api'
 import { Card, Explainer, Field, inputClass } from '../components/ui'
+import { toolLabel } from '../labels'
 
 const TOOLS = [
   'reflections', 'personalmotivators', 'areamissions', 'abilitiesfilter',
@@ -57,7 +58,7 @@ export default function Content() {
           <Field label="Tool">
             <select className={inputClass} value={tool} onChange={(e) => setTool(e.target.value)}>
               {TOOLS.map((t) => (
-                <option key={t} value={t}>{t}</option>
+                <option key={t} value={t}>{toolLabel(t)}</option>
               ))}
             </select>
           </Field>

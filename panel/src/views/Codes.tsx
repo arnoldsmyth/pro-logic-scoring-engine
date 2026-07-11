@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { get, post } from '../api'
 import { useAuth } from '../auth'
 import { Badge, Button, Card, Explainer, Field, Table, inputClass } from '../components/ui'
+import { CODE_TYPE_LABELS } from '../labels'
 
 type Term = { id: number; recipient: string; kind: string; amount: string; currency: string; active: boolean }
 type Code = {
@@ -100,9 +101,9 @@ export default function Codes() {
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Type">
               <select className={inputClass} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                <option value="training">training</option>
-                <option value="bizdev">bizdev</option>
-                <option value="derivative">derivative (no royalty)</option>
+                {Object.entries(CODE_TYPE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
               </select>
             </Field>
             <Field label="Allowed scopes (comma-sep)">

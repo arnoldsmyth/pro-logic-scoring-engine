@@ -72,9 +72,9 @@ export default function Assessments() {
       </Explainer>
 
       <Card>
-        <div className="flex items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3">
           <Field label="Search external id / email / name">
-            <input className={inputClass} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} />
+            <input className={`${inputClass} sm:w-72`} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} />
           </Field>
           <Button onClick={search}>Search</Button>
         </div>

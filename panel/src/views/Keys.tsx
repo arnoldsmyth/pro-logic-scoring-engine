@@ -66,7 +66,7 @@ export default function Keys() {
 
       {isAdmin && (
         <Card title="Issue a key">
-          <div className="flex items-end gap-3">
+          <div className="flex flex-wrap items-end gap-3">
             <Field label="Client name">
               <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} />
             </Field>

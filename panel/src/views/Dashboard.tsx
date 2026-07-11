@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { Activity, ClipboardList, FileBarChart, Webhook } from 'lucide-react'
 import { get } from '../api'
-import { Bars, Card, Explainer } from '../components/ui'
+import { Bars, Card, Explainer, StatCard } from '../components/ui'
 
 type Stats = {
   scoring_calls_by_day: Record<string, number>
@@ -28,18 +29,11 @@ export default function Dashboard() {
         </p>
       </Explainer>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {Object.entries({
-          Assessments: stats.totals.assessments,
-          'Scored results': stats.totals.scored_results,
-          'Usage events': stats.totals.usage_events,
-          'Webhook failures': stats.totals.webhook_failures,
-        }).map(([label, value]) => (
-          <Card key={label}>
-            <div className="text-2xl font-semibold text-gray-800">{value}</div>
-            <div className="text-xs text-gray-500">{label}</div>
-          </Card>
-        ))}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Assessments" value={stats.totals.assessments} icon={<ClipboardList size={20} strokeWidth={1.75} />} />
+        <StatCard label="Scored results" value={stats.totals.scored_results} icon={<FileBarChart size={20} strokeWidth={1.75} />} />
+        <StatCard label="Usage events" value={stats.totals.usage_events} icon={<Activity size={20} strokeWidth={1.75} />} />
+        <StatCard label="Webhook failures" value={stats.totals.webhook_failures} icon={<Webhook size={20} strokeWidth={1.75} />} />
       </div>
 
       <Card title="Scoring calls — last 14 days">
