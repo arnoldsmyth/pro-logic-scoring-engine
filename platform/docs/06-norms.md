@@ -16,11 +16,14 @@ Pooled norms serve clients that cannot collect gender (also note: US "within-gro
 ## Continuous evaluation & new languages
 
 - Analytics job accumulates anonymized raw scale distributions per language/population from incoming responses; control panel shows sample sizes + drift vs active norm sets.
-- New-language pipeline: launch with `provisional` norms (results flagged) → sample reaches threshold (≥300–400 per scale) → auto-build `candidate` set → side-by-side impact report (% results that would change) → human promotes. Retired sets remain queryable.
+- New-language pipeline: launch with `provisional` norms (results flagged) → sample reaches threshold (≥400 per scale) → auto-build `candidate` set → side-by-side impact report (% results that would change) → Arnold reviews the impact report and manually promotes candidate→active each time (no auto-promote). Retired sets remain queryable.
 - Same pipeline periodically re-evaluates mature norms (the en norms are decades old — drift likely; recalibration is a deliberate, versioned, documented event).
 - Provenance caveat recorded on every set: respondents are self-selected assessment clients, not a general-population sample.
 
 ## Open policy decisions
 
 - Non-binary/unspecified gender: pooled norms are the mechanical answer; needs product-owner sign-off (it changes scores vs gendered norms).
-- Promotion policy: who approves candidate→active, and the exact sample threshold.
+
+## Decided
+
+- 2026-07-11: Candidate-set eligibility threshold = ≥400 responses/scale (not the lower 300 end of the original range — legacy tables are already thin once split by gender/language, so err conservative). Promotion candidate→active is always a manual sign-off by Arnold on the auto-generated impact report; never auto-promoted.

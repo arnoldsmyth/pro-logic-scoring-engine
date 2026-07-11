@@ -3,11 +3,10 @@
 ## Open (needs Arnold decision)
 
 1. **Non-binary/unspecified gender policy** — pooled norms are the mechanical answer; changes scores vs gendered norms; needs product sign-off (06-norms.md).
-2. **Norm promotion policy** — approval owner + exact sample threshold (06-norms.md).
-3. **Enneagram Map content plan** — who writes the type content; reconcile the two non-canonical "need" labels (11 §2).
-4. **Validation Report 3.0** — commission when? Analytics layer will feed it (11 §6).
-5. **Fee schedules** per code type and royalty statement cadence (07).
-6. **Git hosting + repo creation** — nothing can be built until this exists (09).
+2. **Enneagram Map content plan** — who writes the type content; reconcile the two non-canonical "need" labels (11 §2).
+3. **Validation Report 3.0** — commission when? Analytics layer will feed it (11 §6).
+4. **Fee schedules** per code type and royalty statement cadence (07).
+5. **Git hosting + repo creation** — nothing can be built until this exists (09).
 
 ## Decided (with dates)
 
@@ -20,3 +19,4 @@
 - 2026-07-10: Enneagram Map = derivative product, no wings, top-3 of 9, three-lens (M/C/S) type profile.
 - 2026-07-10: Control panel must document under-the-hood mechanics (explainer panels, live pipeline page, audit trace view) (08).
 - 2026-07-11: MCS Development carries forward into v2 as a scope preset; registered as a product/access-code preset as-needed (no dedicated upfront build — engine is data-driven, per 04) (11 §3).
+- 2026-07-11: Norm promotion policy — candidate-set threshold = ≥400/scale; promotion candidate→active is always manual sign-off by Arnold on the impact report, never automated (06).
