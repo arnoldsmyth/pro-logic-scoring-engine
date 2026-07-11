@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Api\ApiException;
 use App\Api\ToolValidator;
 use App\Http\Controllers\Controller;
+use App\Models\NormSet;
 use App\Scoring\Engine\LegacyConfig;
 use App\Scoring\Engine\ProductCatalog;
 use App\Scoring\Scopes;
@@ -23,16 +24,35 @@ class ReferenceController extends Controller
     /** GET /v2/reference/languages */
     public function languages(): JsonResponse
     {
+        $sets = NormSet::query()->orderBy('id')->get();
+
         return response()->json([
             'languages' => array_map(fn (string $code) => [
                 'code' => $code,
                 'content_coverage' => 'full', // en/fr/pt content is 100% symmetric (docs/03)
-                'norm_status' => [
-                    'male-legacy' => 'active',
-                    'female-legacy' => 'active',
-                    'pooled-v1' => 'planned', // phase 6 (docs/06)
-                ],
+                'norm_status' => $sets
+                    ->filter(fn (NormSet $s) => $s->language === null || $s->language === $code)
+                    ->mapWithKeys(fn (NormSet $s) => [$s->slug => $s->status])
+                    ->all() ?: ['male-legacy' => 'active', 'female-legacy' => 'active'],
             ], self::SUPPORTED),
+        ]);
+    }
+
+    /** GET /v2/reference/norm-sets — versioned norm sets with provenance (docs/06). */
+    public function normSets(): JsonResponse
+    {
+        return response()->json([
+            'norm_sets' => NormSet::query()->orderBy('id')->get()->map(fn (NormSet $s) => [
+                'slug' => $s->slug,
+                'status' => $s->status,
+                'language' => $s->language, // null = all languages
+                'gender' => $s->gender, // null = pooled
+                'provisional' => $s->provisional,
+                'description' => $s->description,
+                'provenance' => $s->provenance,
+                'activated_at' => $s->activated_at?->toIso8601String(),
+                'retired_at' => $s->retired_at?->toIso8601String(),
+            ])->all(),
         ]);
     }
 

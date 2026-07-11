@@ -25,4 +25,5 @@ Route::prefix('v2')->middleware([AuthenticateApiKey::class])->group(function () 
     Route::get('reference/questions', [ReferenceController::class, 'questions']);
     Route::get('reference/translations', [ReferenceController::class, 'translations']);
     Route::get('reference/scopes', [ReferenceController::class, 'scopes']);
+    Route::get('reference/norm-sets', [ReferenceController::class, 'normSets']);
 });

@@ -6,12 +6,15 @@ use App\Jobs\DeliverWebhook;
 use App\Models\AccessCode;
 use App\Models\ApiKey;
 use App\Models\Assessment;
+use App\Models\NormSample;
+use App\Models\NormSet;
 use App\Models\ScoredResult;
 use App\Models\UsageEvent;
 use App\Models\WebhookDelivery;
 use App\Scoring\Contracts\ScoringEngine;
 use App\Scoring\Engine\AuditCollector;
 use App\Scoring\Engine\LegacyConfig;
+use App\Scoring\Engine\NormSampler;
 use App\Scoring\Engine\ProductCatalog;
 use App\Scoring\Scopes;
 use Illuminate\Support\Facades\DB;
@@ -65,14 +68,15 @@ class ScoringService
             ]);
         }
 
-        $normSet = $this->resolveNormSet($assessment, $scopes, $input['norms'] ?? null);
+        [$normSet, $provisional] = $this->resolveNormSet($assessment, $scopes, $input['norms'] ?? null);
 
         $toolResponses = $assessment->toolResponses();
         $engineNormSet = $normSet === 'none' ? 'male-legacy' : $normSet; // norms never touch non-gendered scopes
         $registration = ['gender' => $assessment->gender, 'language' => $language];
         $audit = ($input['audit'] ?? false) ? new AuditCollector : null;
+        $sampler = new NormSampler;
 
-        $results = $this->engine->score($registration, $toolResponses, $scopes, $engineNormSet, $format, $product, $audit);
+        $results = $this->engine->score($registration, $toolResponses, $scopes, $engineNormSet, $format, $product, $audit, $sampler);
         $payload = Scopes::filter($results, $scopes, $toolResponses['reflections'] ?? null);
 
         // Keys format is what gets persisted (docs/03: strings render on
@@ -82,7 +86,7 @@ class ScoringService
             : Scopes::filter($this->engine->score($registration, $toolResponses, $scopes, $engineNormSet, 'keys', $product), $scopes, $toolResponses['reflections'] ?? null);
 
         $scoredAt = now();
-        DB::transaction(function () use ($apiKey, $assessment, $code, $scopes, $normSet, $product, $language, $keysPayload, $scoredAt, $audit) {
+        DB::transaction(function () use ($apiKey, $assessment, $code, $scopes, $normSet, $product, $language, $keysPayload, $scoredAt, $audit, $sampler) {
             ScoredResult::create([
                 'assessment_id' => $assessment->id,
                 'scopes' => $scopes,
@@ -107,6 +111,8 @@ class ScoringService
             ]);
 
             $code->increment('uses_count');
+
+            NormSample::record($language, $assessment->gender, $sampler->observations);
         });
 
         $envelope = [
@@ -115,7 +121,7 @@ class ScoringService
             'scored_at' => $scoredAt->toIso8601String(),
             'language' => $language,
             'format' => $format,
-            'norms' => ['set_id' => $normSet, 'provisional' => false],
+            'norms' => ['set_id' => $normSet, 'provisional' => $provisional],
             'scopes' => $payload,
         ];
 
@@ -219,28 +225,58 @@ class ScoringService
     /**
      * docs/04 + 06: gender-split norms apply only to scopes touching the S
      * or P dimensions. Explicit `norms` wins; otherwise the registrant's
-     * gender selects the matching legacy set. Versioned/pooled sets land in
-     * phase 6.
+     * gender selects the matching legacy set, and gender-unspecified
+     * registrants fall back to the active pooled set (decided 2026-07-11).
+     * Returns [slug, provisional].
+     *
+     * @return array{0: string, 1: bool}
      */
-    private function resolveNormSet(Assessment $assessment, array $scopes, ?string $norms): string
+    private function resolveNormSet(Assessment $assessment, array $scopes, ?string $norms): array
     {
         if (! Scopes::anyGendered($scopes)) {
-            return 'none';
+            return ['none', false];
         }
 
         $requested = $norms ?? match ($assessment->gender) {
             'M' => 'male',
             'F' => 'female',
-            default => throw new ApiException(422, 'norms_required', 'Requested scopes use gender-split norms; registration has no gender, so pass an explicit `norms` value.', [
-                'available' => ['male', 'female'],
-            ]),
+            default => 'pooled',
         };
 
-        return match ($requested) {
-            'male', 'male-legacy' => 'male-legacy',
-            'female', 'female-legacy' => 'female-legacy',
-            'pooled' => throw new ApiException(422, 'norm_set_unavailable', 'Pooled norms (pooled-v1) arrive with the norm analytics phase — use male or female for now.'),
-            default => throw new ApiException(422, 'norm_set_unavailable', "Unknown norm set '{$requested}'.", ['available' => ['male', 'female']]),
-        };
+        switch ($requested) {
+            case 'male':
+            case 'male-legacy':
+                return ['male-legacy', false];
+            case 'female':
+            case 'female-legacy':
+                return ['female-legacy', false];
+            case 'pooled':
+                $pooled = NormSet::query()->where('status', 'active')->whereNull('gender')->orderByDesc('activated_at')->first();
+                if ($pooled === null) {
+                    throw new ApiException(422, 'norm_set_unavailable', $norms === null
+                        ? 'Registration has no gender and no pooled norm set is active yet — pass an explicit `norms` value.'
+                        : 'No pooled norm set is active yet (pooled-v1 lands with the historical derivation) — use male or female for now.', [
+                            'available' => $this->availableNormSets(),
+                        ]);
+                }
+
+                return [$pooled->slug, $pooled->provisional];
+            default:
+                $set = NormSet::query()->where('slug', $requested)->first();
+                if ($set === null) {
+                    throw new ApiException(422, 'norm_set_unavailable', "Unknown norm set '{$requested}'.", ['available' => $this->availableNormSets()]);
+                }
+                if ($set->status !== 'active') {
+                    throw new ApiException(422, 'norm_set_unavailable', "Norm set '{$requested}' is {$set->status}, not active — only active sets score client requests. Candidate sets are exercised via the impact-report pipeline.", ['available' => $this->availableNormSets()]);
+                }
+
+                return [$set->slug, $set->provisional];
+        }
+    }
+
+    /** @return list<string> */
+    private function availableNormSets(): array
+    {
+        return ['male', 'female', ...NormSet::query()->where('status', 'active')->pluck('slug')->all()];
     }
 }

@@ -18,6 +18,8 @@ class RuleInterpreter
         private readonly LegacyConfig $config,
         private readonly SessionState $state,
         private readonly ?AuditCollector $audit = null,
+        private readonly ?array $normTable = null,
+        private readonly ?NormSampler $sampler = null,
     ) {}
 
     /** Run one stage's rule list in legacy cursor order. */
@@ -208,9 +210,13 @@ class RuleInterpreter
 
     private function convertPzsd(string $stage, int $ruleKey): void
     {
-        $matrix = $this->config->pzsdMatrix();
+        // The session's norm set supplies the conversion table (docs/06);
+        // legacy behavior (gender-split PZSDConversionMatrix) is the
+        // male-legacy/female-legacy table resolved by the engine.
+        $table = $this->normTable ?? $this->config->pzsdMatrix()[$this->state->gender] ?? [];
         foreach ($this->sourceRows($stage, $ruleKey) as $row) {
-            $normed = $matrix[$row['gender']][$row['scaleKey']][(string) $row['response']] ?? null;
+            $this->sampler?->observe($row['scaleKey'], (float) $row['response']);
+            $normed = $table[$row['scaleKey']][(string) $row['response']] ?? null;
             if ($normed === null) {
                 continue; // inner join
             }

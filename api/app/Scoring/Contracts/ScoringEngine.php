@@ -3,6 +3,7 @@
 namespace App\Scoring\Contracts;
 
 use App\Scoring\Engine\AuditCollector;
+use App\Scoring\Engine\NormSampler;
 use App\Scoring\Engine\ProductCatalog;
 
 interface ScoringEngine
@@ -18,7 +19,8 @@ interface ScoringEngine
      * @param  string  $format  'keys' (results.format 1) or 'strings' (format 2, resolved content text)
      * @param  string  $productCode  which catalog product/version-bundle to score against (ProductCatalog, docs/07)
      * @param  ?AuditCollector  $audit  when given, filled with the docs/03 explainability trace
+     * @param  ?NormSampler  $sampler  when given, collects raw PZSD scale observations (docs/06 analytics)
      * @return array<string, mixed>
      */
-    public function score(array $registration, array $tools, array $scopes = ['full'], string $normSet = 'male-legacy', string $format = 'keys', string $productCode = ProductCatalog::DEFAULT_CODE, ?AuditCollector $audit = null): array;
+    public function score(array $registration, array $tools, array $scopes = ['full'], string $normSet = 'male-legacy', string $format = 'keys', string $productCode = ProductCatalog::DEFAULT_CODE, ?AuditCollector $audit = null, ?NormSampler $sampler = null): array;
 }

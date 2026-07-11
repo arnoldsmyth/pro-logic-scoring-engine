@@ -214,7 +214,7 @@ class ApiSurfaceTest extends TestCase
             ->assertJsonPath('error.code', 'access_code_unusable');
     }
 
-    public function test_gendered_scope_without_gender_or_norms_is_rejected(): void
+    public function test_gendered_scope_without_gender_falls_back_to_pooled_which_is_unavailable(): void
     {
         $assessment = $this->makeAssessment(['gender' => null]);
         $assessment->tools()->create(['tool' => 'person', 'responses' => array_fill(1, 54, 3), 'submitted_at' => now()]);
@@ -239,7 +239,7 @@ class ApiSurfaceTest extends TestCase
             'scopes' => ['mcs.s'],
             'access_code' => $code->code,
         ])->assertStatus(422)
-            ->assertJsonPath('error.code', 'norms_required');
+            ->assertJsonPath('error.code', 'norm_set_unavailable');
     }
 
     public function test_reference_scopes_is_self_documenting(): void

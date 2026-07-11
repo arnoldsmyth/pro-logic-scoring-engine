@@ -165,6 +165,38 @@ class LegacyConfig
         })();
     }
 
+    /**
+     * Resolve a norm set slug to its conversion table (docs/06):
+     * [toolScaleDetailKey][raw] → normed. The legacy slugs read
+     * PZSDConversionMatrix directly (golden fidelity — byte-identical to the
+     * gender-split lookup they replace); anything else loads a versioned
+     * norm_sets row's entries.
+     */
+    public function normTable(string $slug): array
+    {
+        return $this->cache["norm.{$slug}"] ??= (function () use ($slug) {
+            $legacy = ['male-legacy' => 'M', 'female-legacy' => 'F'];
+            if (isset($legacy[$slug])) {
+                return $this->pzsdMatrix()[$legacy[$slug]] ?? [];
+            }
+
+            $rows = DB::table('norm_set_entries')
+                ->join('norm_sets', 'norm_sets.id', '=', 'norm_set_entries.norm_set_id')
+                ->where('norm_sets.slug', $slug)
+                ->get(['tool_scale_detail_key', 'raw', 'normed']);
+            if ($rows->isEmpty()) {
+                throw new RuntimeException("Unknown or empty norm set '{$slug}'.");
+            }
+
+            $table = [];
+            foreach ($rows as $r) {
+                $table[(int) $r->tool_scale_detail_key][(string) (float) $r->raw] = (float) $r->normed;
+            }
+
+            return $table;
+        })();
+    }
+
     /** @return list<array{min: float, max: float, toolScaleDetailKey: int}> */
     public function pxiMatrix(): array
     {

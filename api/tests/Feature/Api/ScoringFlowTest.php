@@ -4,10 +4,13 @@ namespace Tests\Feature\Api;
 
 use App\Models\AccessCode;
 use App\Models\ApiKey;
+use App\Models\NormSample;
+use App\Models\NormSet;
 use App\Models\RoyaltyTerm;
 use App\Models\UsageEvent;
 use App\Models\WebhookDelivery;
 use App\Scoring\GoldenMaster\GoldenRepository;
+use App\Scoring\Norms\NormAnalytics;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -94,6 +97,72 @@ class ScoringFlowTest extends TestCase
         $delivery = WebhookDelivery::query()->latest('id')->first();
         $this->assertSame('delivered', $delivery->status);
         $this->assertSame(1, $delivery->attempts);
+    }
+
+    public function test_versioned_norm_sets_score_and_lifecycle_works(): void
+    {
+        Artisan::call('norms:seed-legacy');
+        $session = $this->goldens->all()[0];
+        $gender = strtoupper($session->registration()['gender'] ?? 'M');
+        $legacySlug = $gender === 'F' ? 'female-legacy' : 'male-legacy';
+
+        // A versioned set cloned from the matching legacy set must score
+        // byte-identically to it.
+        $legacy = NormSet::query()->where('slug', $legacySlug)->first();
+        $clone = NormSet::create([
+            'slug' => 'clone-v1',
+            'status' => 'active',
+            'language' => 'en',
+            'gender' => $gender,
+            'provenance' => ['method' => 'test clone'],
+            'activated_at' => now(),
+        ]);
+        $clone->entries()->createMany(
+            $legacy->entries()->get(['tool_scale_detail_key', 'raw', 'normed'])->map->only(['tool_scale_detail_key', 'raw', 'normed'])->all()
+        );
+
+        ['token' => $token, 'attributes' => $attributes] = ApiKey::generate();
+        ApiKey::create([...$attributes, 'name' => 'norms-e2e']);
+        $code = AccessCode::create([
+            'code' => AccessCode::generateCode(),
+            'type' => 'training',
+            'product_code' => 'VC18',
+            'allowed_scopes' => ['full'],
+        ]);
+        $this->withHeader('Authorization', "Bearer {$token}");
+
+        $body = [
+            'registration' => ['firstname' => 'Norm', 'lastname' => 'Test', 'email' => 'n@example.com', 'language' => 'en', 'gender' => $gender],
+            'tools' => $session->tools(),
+            'scopes' => ['mcs', 'pro.person'],
+            'access_code' => $code->code,
+        ];
+        $viaLegacy = $this->postJson('/v2/score', [...$body, 'norms' => $legacySlug])->assertStatus(201)->json();
+        $viaClone = $this->postJson('/v2/score', [...$body, 'norms' => 'clone-v1'])->assertStatus(201)->json();
+
+        $this->assertSame('clone-v1', $viaClone['norms']['set_id']);
+        $this->assertSame($viaLegacy['scopes'], $viaClone['scopes'], 'versioned set cloned from legacy must score identically');
+
+        // Sampling: gendered scoring accumulated anonymized raw observations.
+        $this->assertGreaterThan(0, NormSample::query()->where('language', 'en')->where('gender', $gender)->sum('count'));
+
+        // Candidate lifecycle: build (forced — tiny sample), impact, promote.
+        $analytics = app(NormAnalytics::class);
+        $candidate = $analytics->buildCandidate('test-candidate', 'en', $gender, force: true);
+        $this->assertSame('candidate', $candidate->status);
+        $this->assertTrue($candidate->provisional, 'below-threshold build must be marked provisional');
+
+        // Candidate sets never score client API requests.
+        $this->postJson('/v2/score', [...$body, 'norms' => 'test-candidate'])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'norm_set_unavailable');
+
+        $report = $analytics->impactReport($candidate, limit: 10);
+        $this->assertArrayHasKey('pct_changed', $report);
+        $this->assertGreaterThan(0, $report['assessments_compared']);
+        $stored = $candidate->refresh()->impact;
+        $this->assertSame($report['baseline'], $stored['baseline']);
+        $this->assertEquals($report['assessments_compared'], $stored['assessments_compared']);
     }
 
     /** Key-order-insensitive assertSame (golden JSON key order differs from the engine map's). */
