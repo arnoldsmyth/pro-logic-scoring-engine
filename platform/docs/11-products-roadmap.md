@@ -32,16 +32,20 @@ The current live product — one entry in the engine's product catalog (04, 07),
 
 ## 3. MCS Development (TM) (dormant, revival = config)
 
-The launch product minus reflections + minus Org/Person/Role ACT appendices; 73 of 79 outputs, 8 tools. Complete legacy kit (rules, 4-language templates, charts, C# classes); used on 7 projects. In v2: a scope preset / package. Decision pending.
+The launch product minus reflections + minus Org/Person/Role ACT appendices; 73 of 79 outputs, 8 tools. Complete legacy kit (rules, 4-language templates, charts, C# classes); used on 7 projects. Decided 2026-07-11: carries forward into v2 as a scope preset, registered as a product/access-code preset as-needed, no dedicated build.
 
 ## 4. General Satisfaction Survey (dormant, trivial)
 
 7-question feedback form (en/fr/pt), no scoring/report ever existed. In v2: simple survey endpoint + net-new dashboard if wanted.
 
-## 5. Not carrying forward
+## 5. Standalone Role Report (dormant, revival = config)
 
-Role Report (already absorbed into the launch product's current version; standalone version = packaging decision on existing data). Human Synergistics scales (orphaned labels; full build + third-party licensing — decommissioned).
+Data already exists inside the launch product (`pro.role` scope, 54 Qs, per 04-scoring-engine.md). Decided 2026-07-11: carries forward into v2 as a scope preset, same treatment as MCS Development — registered as a product/access-code preset as-needed, no dedicated build.
 
-## 6. Validation Report 3.0 (recommended project)
+## 6. Not carrying forward
+
+Human Synergistics scales (orphaned labels; full build + third-party licensing — decommissioned).
+
+## 7. Validation Report 3.0 (recommended project)
 
 Existing evidence (2010 overview + 2019 Monahan/Fazio report, n=8,560, data 2004–2018) has real gaps: alpha for only 4 of 7 scales (Mission/PXI/Personal Concept missing; ipsative Mission tools need non-alpha methods); "CFA via varimax" contradiction, no loadings/fit indices; weak scales (Observing, Producing < .70); inter-CVA correlations up to .735 undercutting 9-factor claim; no test-retest; criterion evidence anecdotal; no gender invariance/DIF testing despite gender-split norms; zero non-English validation; norming methodology never documented. The v2 analytics layer (06-norms.md) collects exactly the data a new report needs; comparators should modernize (Big Five/HEXACO/O*NET). Full digest of the four source documents: agent report referenced in CLAUDE-NOTES; source docs in `Technical Overviews/`.

@@ -20,3 +20,4 @@
 - 2026-07-11: Norm promotion policy — candidate-set threshold = ≥400/scale; promotion candidate→active is always manual sign-off by Arnold on the impact report, never automated (06).
 - 2026-07-11: Non-binary/unspecified gender policy — use pooled norms (06 §Launch sets); confirms pooled-v1 as the answer for gender-unspecified respondents.
 - 2026-07-11: Git hosting + repo creation — resolved; repo exists at github.com/arnoldsmyth/pro-logic-scoring-engine (09).
+- 2026-07-11: Standalone Role Report carries forward as a v2 product/scope preset; same treatment as MCS Development — `pro.role` scope already exists (04), so this is a config/access-code registration, not an engine build (11 §5).

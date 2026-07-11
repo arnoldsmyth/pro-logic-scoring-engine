@@ -11,7 +11,7 @@ Everything a client can submit. Verified against sample register messages, the J
 | lastname | string | yes | |
 | email | string | yes | valid email |
 | language | string | yes | ISO 639-1; v1: en, fr, pt |
-| gender | char | required for scopes touching S/P dimensions | M / F (norms are gender-split — see 06-norms.md; policy for non-binary pending) |
+| gender | char | required for scopes touching S/P dimensions | M / F (norms are gender-split — see 06-norms.md; non-binary/unspecified scores against pooled-v1 norms, decided 2026-07-11) |
 | dob | date | no | ISO 8601 in v2 (legacy M/D/YYYY). NOT used in scoring |
 | external_id | string | no | client correlation key, echoed everywhere |
 
