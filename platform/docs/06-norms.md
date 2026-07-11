@@ -20,10 +20,7 @@ Pooled norms serve clients that cannot collect gender (also note: US "within-gro
 - Same pipeline periodically re-evaluates mature norms (the en norms are decades old — drift likely; recalibration is a deliberate, versioned, documented event).
 - Provenance caveat recorded on every set: respondents are self-selected assessment clients, not a general-population sample.
 
-## Open policy decisions
-
-- Non-binary/unspecified gender: pooled norms are the mechanical answer; needs product-owner sign-off (it changes scores vs gendered norms).
-
 ## Decided
 
 - 2026-07-11: Candidate-set eligibility threshold = ≥400 responses/scale (not the lower 300 end of the original range — legacy tables are already thin once split by gender/language, so err conservative). Promotion candidate→active is always a manual sign-off by Arnold on the auto-generated impact report; never auto-promoted.
+- 2026-07-11: Non-binary/unspecified gender → use `pooled-v1` norms. Confirms pooled as the answer for respondents who don't provide gender, on top of its existing role serving clients that can't collect gender at all.
