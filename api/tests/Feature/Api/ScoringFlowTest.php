@@ -6,9 +6,11 @@ use App\Models\AccessCode;
 use App\Models\ApiKey;
 use App\Models\RoyaltyTerm;
 use App\Models\UsageEvent;
+use App\Models\WebhookDelivery;
 use App\Scoring\GoldenMaster\GoldenRepository;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\Group;
 use Tests\TestCase;
@@ -51,6 +53,47 @@ class ScoringFlowTest extends TestCase
     {
         DB::rollBack();
         parent::tearDown();
+    }
+
+    public function test_webhook_delivers_scored_event_with_valid_hmac(): void
+    {
+        Http::fake(['partner.test/*' => Http::response(['ok' => true])]);
+
+        $session = $this->goldens->all()[0];
+        ['token' => $token, 'attributes' => $attributes] = ApiKey::generate();
+        ApiKey::create([
+            ...$attributes,
+            'name' => 'webhook-e2e',
+            'webhook_url' => 'https://partner.test/hooks/scoring',
+            'webhook_secret' => 'whsec_test',
+        ]);
+        $code = AccessCode::create([
+            'code' => AccessCode::generateCode(),
+            'type' => 'bizdev',
+            'product_code' => 'VC18',
+            'allowed_scopes' => ['pro.org'],
+        ]);
+        $this->withHeader('Authorization', "Bearer {$token}");
+
+        $this->postJson('/v2/score', [
+            'registration' => ['firstname' => 'Hook', 'lastname' => 'Test', 'email' => 'hook@example.com', 'language' => 'en'],
+            'tools' => ['organization' => $session->tools()['organization']],
+            'scopes' => ['pro.org'],
+            'access_code' => $code->code,
+        ])->assertStatus(201);
+
+        Http::assertSent(function ($request) {
+            $body = $request->body();
+
+            return $request->url() === 'https://partner.test/hooks/scoring'
+                && $request->header('X-Event')[0] === 'scored'
+                && $request->header('X-Signature')[0] === hash_hmac('sha256', $body, 'whsec_test')
+                && json_decode($body, true)['event'] === 'scored';
+        });
+
+        $delivery = WebhookDelivery::query()->latest('id')->first();
+        $this->assertSame('delivered', $delivery->status);
+        $this->assertSame(1, $delivery->attempts);
     }
 
     /** Key-order-insensitive assertSame (golden JSON key order differs from the engine map's). */
@@ -108,6 +151,7 @@ class ScoringFlowTest extends TestCase
         $envelope = $this->postJson("/v2/assessments/{$id}/score", [
             'scopes' => ['full'],
             'access_code' => $code->code,
+            'audit' => true,
         ])->assertOk()->json();
 
         $expected = $session->expectedKeys();
@@ -137,6 +181,16 @@ class ScoringFlowTest extends TestCase
         $expectedStrings = $session->expectedStrings();
         $this->assertSame($expectedStrings['mcs'], $strings['scopes']['mcs']);
         $this->assertSameCanonical($expectedStrings['etc'], $strings['scopes']['insights']);
+
+        // Audit trace (docs/03): rules in cursor order through all four
+        // stages, intermediate values, resolved content keys.
+        $audit = $this->getJson("/v2/assessments/{$id}/results/audit")
+            ->assertOk()->json('audit');
+        $this->assertSame('Tool', $audit['rules_fired'][0]['stage']);
+        $stages = array_values(array_unique(array_column($audit['rules_fired'], 'stage')));
+        $this->assertSame(['Tool', 'Package', 'Profile', 'Insight'], $stages);
+        $this->assertNotEmpty($audit['stage_scale_values']['Profile']);
+        $this->assertNotEmpty($audit['content_keys_resolved']);
 
         // Scope-sliced re-render straight from storage.
         $sliced = $this->getJson("/v2/assessments/{$id}/results?scope=pro.role")

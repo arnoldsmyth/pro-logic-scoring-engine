@@ -17,14 +17,17 @@ class RuleInterpreter
     public function __construct(
         private readonly LegacyConfig $config,
         private readonly SessionState $state,
+        private readonly ?AuditCollector $audit = null,
     ) {}
 
     /** Run one stage's rule list in legacy cursor order. */
     public function runStage(string $stage, array $rules): void
     {
         foreach ($rules as $rule) {
+            $this->audit?->ruleFired($stage, (int) $rule->ruleKey, trim($rule->proc));
             $this->dispatch($stage, (int) $rule->ruleKey, trim($rule->proc));
         }
+        $this->audit?->stageComplete($stage, $this->state->scaleValues[$stage]);
     }
 
     private function dispatch(string $stage, int $ruleKey, string $proc): void

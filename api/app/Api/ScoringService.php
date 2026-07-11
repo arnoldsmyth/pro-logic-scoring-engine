@@ -2,12 +2,15 @@
 
 namespace App\Api;
 
+use App\Jobs\DeliverWebhook;
 use App\Models\AccessCode;
 use App\Models\ApiKey;
 use App\Models\Assessment;
 use App\Models\ScoredResult;
 use App\Models\UsageEvent;
+use App\Models\WebhookDelivery;
 use App\Scoring\Contracts\ScoringEngine;
+use App\Scoring\Engine\AuditCollector;
 use App\Scoring\Engine\LegacyConfig;
 use App\Scoring\Engine\ProductCatalog;
 use App\Scoring\Scopes;
@@ -67,8 +70,9 @@ class ScoringService
         $toolResponses = $assessment->toolResponses();
         $engineNormSet = $normSet === 'none' ? 'male-legacy' : $normSet; // norms never touch non-gendered scopes
         $registration = ['gender' => $assessment->gender, 'language' => $language];
+        $audit = ($input['audit'] ?? false) ? new AuditCollector : null;
 
-        $results = $this->engine->score($registration, $toolResponses, $scopes, $engineNormSet, $format, $product);
+        $results = $this->engine->score($registration, $toolResponses, $scopes, $engineNormSet, $format, $product, $audit);
         $payload = Scopes::filter($results, $scopes, $toolResponses['reflections'] ?? null);
 
         // Keys format is what gets persisted (docs/03: strings render on
@@ -78,7 +82,7 @@ class ScoringService
             : Scopes::filter($this->engine->score($registration, $toolResponses, $scopes, $engineNormSet, 'keys', $product), $scopes, $toolResponses['reflections'] ?? null);
 
         $scoredAt = now();
-        DB::transaction(function () use ($apiKey, $assessment, $code, $scopes, $normSet, $product, $language, $keysPayload, $scoredAt) {
+        DB::transaction(function () use ($apiKey, $assessment, $code, $scopes, $normSet, $product, $language, $keysPayload, $scoredAt, $audit) {
             ScoredResult::create([
                 'assessment_id' => $assessment->id,
                 'scopes' => $scopes,
@@ -87,6 +91,7 @@ class ScoringService
                 'access_code_id' => $code->id,
                 'language' => $language,
                 'results' => $keysPayload,
+                'audit' => $audit?->toArray(),
                 'scored_at' => $scoredAt,
             ]);
 
@@ -104,7 +109,7 @@ class ScoringService
             $code->increment('uses_count');
         });
 
-        return [
+        $envelope = [
             'assessment_id' => $assessment->public_id,
             'external_id' => $assessment->external_id,
             'scored_at' => $scoredAt->toIso8601String(),
@@ -113,6 +118,20 @@ class ScoringService
             'norms' => ['set_id' => $normSet, 'provisional' => false],
             'scopes' => $payload,
         ];
+
+        // Optional per-key webhook (docs/05): scored event, HMAC-signed,
+        // delivered async with retries — never blocks the sync response.
+        if ($apiKey->webhook_url !== null) {
+            $delivery = WebhookDelivery::create([
+                'api_key_id' => $apiKey->id,
+                'event' => 'scored',
+                'url' => $apiKey->webhook_url,
+                'payload' => ['event' => 'scored', ...$envelope, 'format' => 'keys', 'scopes' => $keysPayload],
+            ]);
+            DeliverWebhook::dispatch($delivery->id, $apiKey->webhook_secret ?? '');
+        }
+
+        return $envelope;
     }
 
     /**

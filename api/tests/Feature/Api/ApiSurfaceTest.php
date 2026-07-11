@@ -282,6 +282,16 @@ class ApiSurfaceTest extends TestCase
         $this->assertSame(1, Assessment::count());
     }
 
+    public function test_openapi_document_is_published(): void
+    {
+        $spec = $this->getJson('/openapi.json')->assertOk()->json();
+        $this->assertSame('3.1.0', $spec['openapi']);
+        $this->assertArrayHasKey('/v2/score', $spec['paths']);
+        $this->assertArrayHasKey('scored', $spec['webhooks']);
+
+        $this->get('/docs')->assertOk()->assertSee('api-reference', false);
+    }
+
     public function test_idempotency_conflicts_on_payload_change(): void
     {
         $body = ['firstname' => 'Ada', 'lastname' => 'Lovelace', 'email' => 'ada@example.com', 'language' => 'en'];

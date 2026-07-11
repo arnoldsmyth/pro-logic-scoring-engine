@@ -3,6 +3,7 @@
 namespace App\Scoring;
 
 use App\Scoring\Contracts\ScoringEngine;
+use App\Scoring\Engine\AuditCollector;
 use App\Scoring\Engine\LegacyConfig;
 use App\Scoring\Engine\ProductCatalog;
 use App\Scoring\Engine\ResultAssembler;
@@ -25,7 +26,7 @@ class InterpreterEngine implements ScoringEngine
 {
     public function __construct(private readonly LegacyConfig $config) {}
 
-    public function score(array $registration, array $tools, array $scopes = ['full'], string $normSet = 'male-legacy', string $format = 'keys', string $productCode = ProductCatalog::DEFAULT_CODE): array
+    public function score(array $registration, array $tools, array $scopes = ['full'], string $normSet = 'male-legacy', string $format = 'keys', string $productCode = ProductCatalog::DEFAULT_CODE, ?AuditCollector $audit = null): array
     {
         $product = ProductCatalog::get($productCode);
 
@@ -44,12 +45,13 @@ class InterpreterEngine implements ScoringEngine
         $state = new SessionState($gender, $languageKey);
         $this->ingest($state, $tools, $languageKey, $product['toolVersions']);
 
-        $interpreter = new RuleInterpreter($this->config, $state);
+        $interpreter = new RuleInterpreter($this->config, $state, $audit);
         $toolVersionKeys = array_values(array_intersect_key($product['toolVersions'], $tools));
         $interpreter->runStage('Tool', $this->config->toolRules($toolVersionKeys));
         $interpreter->runStage('Package', $this->config->packageRules($product['packageVersionKey']));
         $interpreter->runStage('Profile', $this->config->profileRules($product['profileVersionKey']));
         $interpreter->runStage('Insight', $this->config->insightRules($product['insightScoreVersionKey']));
+        $audit?->finalize($state);
 
         $assembler = new ResultAssembler;
 
