@@ -24,6 +24,11 @@ class AccessCode extends Model
         return $this->hasMany(RoyaltyTerm::class);
     }
 
+    public function usageEvents(): HasMany
+    {
+        return $this->hasMany(UsageEvent::class);
+    }
+
     /** Unguessable opaque code — never a product brand name (docs/07). */
     public static function generateCode(): string
     {

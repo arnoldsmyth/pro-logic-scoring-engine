@@ -1,0 +1,180 @@
+import { useEffect, useState } from 'react'
+import { get } from '../api'
+import { Badge, Button, Card, Explainer, Field, Table, inputClass } from '../components/ui'
+
+type Row = {
+  public_id: string
+  external_id: string | null
+  name: string
+  email: string
+  language: string
+  gender: string | null
+  api_key: string | null
+  tools_submitted: number
+  times_scored: number
+  created_at: string
+}
+
+type Detail = {
+  public_id: string
+  name: string
+  email: string
+  tools: { tool: string; answers: number; submitted_at: string }[]
+  scopes_ready: Record<string, boolean>
+  results: {
+    id: number
+    scopes: string[]
+    norm_set: string
+    access_code: string | null
+    has_audit: boolean
+    scored_at: string
+    results: Record<string, unknown>
+  }[]
+}
+
+type Audit = {
+  norm_set: string
+  stages: Record<string, { rules_fired: number; rules: { rule: number; proc: string }[]; scale_values: { scaleKey: number | null; response: number }[] }>
+  content_keys_resolved: unknown[]
+}
+
+export default function Assessments() {
+  const [q, setQ] = useState('')
+  const [rows, setRows] = useState<Row[]>([])
+  const [detail, setDetail] = useState<Detail | null>(null)
+  const [audit, setAudit] = useState<Audit | null>(null)
+
+  const search = () => {
+    get<{ assessments: Row[] }>(`/assessments?q=${encodeURIComponent(q)}`).then((r) => setRows(r.assessments))
+  }
+  useEffect(search, [])
+
+  const open = async (id: string) => {
+    setAudit(null)
+    setDetail(await get<Detail>(`/assessments/${id}`))
+  }
+
+  const loadAudit = async (resultId: number) => {
+    if (!detail) return
+    setAudit(await get<Audit>(`/assessments/${detail.public_id}/audit/${resultId}`))
+  }
+
+  return (
+    <div className="space-y-4">
+      <Explainer title="assessment lifecycle">
+        <p>
+          An assessment is created with registration info, receives tools incrementally (each validated on write),
+          and can be scored any number of times — every scoring call records which scopes, norm set, and access code
+          it used, forever. The audit trace (when captured with <code>audit:true</code>) shows each rule the
+          interpreter fired, stage by stage, with the intermediate scale values — the full walkthrough of how the
+          inputs became the result.
+        </p>
+      </Explainer>
+
+      <Card>
+        <div className="flex items-end gap-3">
+          <Field label="Search external id / email / name">
+            <input className={inputClass} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} />
+          </Field>
+          <Button onClick={search}>Search</Button>
+        </div>
+      </Card>
+
+      <Card title={`Assessments (${rows.length})`}>
+        <Table head={['External id', 'Name', 'Email', 'Lang', 'Key', 'Tools', 'Scored', 'Created', '']}>
+          {rows.map((r) => (
+            <tr key={r.public_id}>
+              <td className="px-3 py-2 text-xs text-gray-600">{r.external_id ?? '—'}</td>
+              <td className="px-3 py-2 font-medium text-gray-700">{r.name}</td>
+              <td className="px-3 py-2 text-gray-500">{r.email}</td>
+              <td className="px-3 py-2 text-gray-500">{r.language}</td>
+              <td className="px-3 py-2 text-xs text-gray-500">{r.api_key}</td>
+              <td className="px-3 py-2 text-gray-600">{r.tools_submitted}/9</td>
+              <td className="px-3 py-2 text-gray-600">{r.times_scored}×</td>
+              <td className="px-3 py-2 text-xs text-gray-500">{r.created_at.slice(0, 10)}</td>
+              <td className="px-3 py-2">
+                <Button kind="secondary" onClick={() => open(r.public_id)}>Open</Button>
+              </td>
+            </tr>
+          ))}
+        </Table>
+      </Card>
+
+      {detail && (
+        <Card title={`${detail.name} — ${detail.public_id}`}>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div>
+              <h3 className="mb-2 text-xs font-semibold uppercase text-gray-400">Tools received</h3>
+              <ul className="space-y-1 text-sm">
+                {detail.tools.map((t) => (
+                  <li key={t.tool} className="flex justify-between">
+                    <code className="text-gray-700">{t.tool}</code>
+                    <span className="text-xs text-gray-400">{t.answers} answers · {t.submitted_at.slice(0, 10)}</span>
+                  </li>
+                ))}
+              </ul>
+              <h3 className="mb-2 mt-4 text-xs font-semibold uppercase text-gray-400">Scope readiness</h3>
+              <div className="flex flex-wrap gap-1">
+                {Object.entries(detail.scopes_ready).map(([scope, ready]) => (
+                  <Badge key={scope} tone={ready ? 'green' : 'gray'}>{scope}</Badge>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3 className="mb-2 text-xs font-semibold uppercase text-gray-400">Results</h3>
+              <ul className="space-y-2 text-sm">
+                {detail.results.map((res) => (
+                  <li key={res.id} className="rounded border border-gray-100 p-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-700">{res.scopes.join(', ')}</span>
+                      <span className="text-xs text-gray-400">{res.scored_at.slice(0, 16).replace('T', ' ')}</span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                      <Badge tone="blue">norms: {res.norm_set}</Badge>
+                      {res.has_audit ? (
+                        <Button kind="secondary" onClick={() => loadAudit(res.id)}>View audit trace</Button>
+                      ) : (
+                        <span>no audit captured</span>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {audit && (
+        <Card title={`Audit trace — norm set ${audit.norm_set}`}>
+          <p className="mb-3 text-sm text-gray-500">
+            The four-stage cascade as it actually ran. Each stage lists the rules fired in cursor order and the scale
+            values it produced for the next stage.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-4">
+            {Object.entries(audit.stages).map(([stage, data]) => (
+              <div key={stage} className="rounded border border-gray-200">
+                <div className="border-b border-gray-100 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">
+                  {stage} <span className="font-normal text-gray-400">— {data.rules_fired} rules</span>
+                </div>
+                <div className="max-h-64 overflow-y-auto p-2 text-xs">
+                  {data.rules.slice(0, 100).map((r, i) => (
+                    <div key={i} className="flex justify-between py-0.5 text-gray-500">
+                      <code>#{r.rule}</code>
+                      <span>{r.proc.replace('sp_', '')}</span>
+                    </div>
+                  ))}
+                  {data.rules.length > 100 && <p className="pt-1 text-gray-400">…and {data.rules.length - 100} more</p>}
+                </div>
+                <div className="border-t border-gray-100 px-3 py-1 text-xs text-gray-400">
+                  {data.scale_values.length} scale values out
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-gray-400">{audit.content_keys_resolved.length} content keys resolved by the insight stage.</p>
+        </Card>
+      )}
+    </div>
+  )
+}

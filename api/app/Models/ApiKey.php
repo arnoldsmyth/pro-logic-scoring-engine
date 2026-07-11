@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 class ApiKey extends Model
@@ -21,6 +22,11 @@ class ApiKey extends Model
     public function defaultAccessCode(): BelongsTo
     {
         return $this->belongsTo(AccessCode::class, 'default_access_code_id');
+    }
+
+    public function usageEvents(): HasMany
+    {
+        return $this->hasMany(UsageEvent::class);
     }
 
     /**
