@@ -92,21 +92,73 @@ class PanelApiTest extends TestCase
             'issued_to' => 'Partner X',
         ])->assertStatus(201)->json('codes');
         $this->assertCount(3, $codes);
+        $codeStr = $codes[0];
 
-        $code = AccessCode::query()->where('code', $codes[0])->first();
-        $this->postJson("/panel/api/codes/{$code->id}/terms", [
+        $termId = $this->postJson("/panel/api/codes/{$codeStr}/terms", [
             'recipient' => 'content-owner',
             'kind' => 'flat_per_report',
             'amount' => 10,
-        ])->assertStatus(201);
+        ])->assertStatus(201)->json('id');
 
-        $listed = $this->getJson('/panel/api/codes')->assertOk()->json('codes');
-        $target = collect($listed)->firstWhere('code', $codes[0]);
-        $this->assertCount(1, $target['royalty_terms']);
+        $detail = $this->getJson("/panel/api/codes/{$codeStr}")->assertOk()->json();
+        $this->assertCount(1, $detail['royalty_terms']);
+        $this->assertFalse($detail['royalty_terms'][0]['locked'], 'a never-charged term must be editable');
 
-        $termId = $target['royalty_terms'][0]['id'];
+        // Unused term: freely editable.
+        $this->patchJson("/panel/api/terms/{$termId}", ['amount' => 15])
+            ->assertOk()
+            ->assertJsonPath('amount', '15');
+
         $this->postJson("/panel/api/terms/{$termId}/end")->assertOk();
         $this->assertFalse(RoyaltyTerm::find($termId)->active);
+    }
+
+    public function test_code_metadata_editable_but_scope_and_type_lock_after_first_use(): void
+    {
+        $this->actingAs($this->admin());
+        $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
+        $code = AccessCode::create(['code' => 'ac_lock', 'name' => 'Lock test', 'type' => 'training', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
+
+        // Fresh, unused code: type/scopes editable.
+        $this->getJson('/panel/api/codes/ac_lock')->assertOk()->assertJsonPath('scope_and_type_locked', false);
+        $this->patchJson('/panel/api/codes/ac_lock', ['allowed_scopes' => ['pro.role']])->assertOk();
+
+        // Simulate a scoring call having used it.
+        $assessment = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en']);
+        UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $code->id, 'code_type' => 'training', 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['pro.role'], 'fees_due' => [], 'created_at' => now()]);
+        $code->increment('uses_count');
+
+        $this->getJson('/panel/api/codes/ac_lock')->assertOk()->assertJsonPath('scope_and_type_locked', true);
+        $this->patchJson('/panel/api/codes/ac_lock', ['type' => 'bizdev'])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'locked');
+
+        // Metadata fields remain editable regardless.
+        $this->patchJson('/panel/api/codes/ac_lock', ['name' => 'Renamed', 'notes' => 'note'])
+            ->assertOk()
+            ->assertJsonPath('name', 'Renamed');
+    }
+
+    public function test_charged_royalty_term_cannot_be_edited(): void
+    {
+        $this->actingAs($this->admin());
+        $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
+        $code = AccessCode::create(['code' => 'ac_termlock', 'name' => 'Term lock test', 'type' => 'training', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
+        $term = $code->royaltyTerms()->create(['recipient' => 'owner', 'kind' => 'flat_per_report', 'amount' => 10, 'currency' => 'USD']);
+
+        $assessment = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en']);
+        UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $code->id, 'code_type' => 'training', 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['mcs'], 'fees_due' => [['royalty_term_id' => $term->id, 'recipient' => 'owner', 'kind' => 'flat_per_report', 'amount' => '10', 'currency' => 'USD']], 'created_at' => now()]);
+
+        $this->getJson('/panel/api/codes/ac_termlock')->assertOk()->assertJsonPath('royalty_terms.0.locked', true);
+        $this->patchJson("/panel/api/terms/{$term->id}", ['amount' => 999])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'locked');
+
+        // End-and-replace is still the correct path forward.
+        $this->postJson("/panel/api/terms/{$term->id}/end")->assertOk();
+        $newTermId = $this->postJson('/panel/api/codes/ac_termlock/terms', ['recipient' => 'owner', 'kind' => 'flat_per_report', 'amount' => 999])
+            ->assertStatus(201)->json('id');
+        $this->assertNotSame($term->id, $newTermId);
     }
 
     public function test_royalty_statement_is_terms_driven_and_reports_by_code_name(): void

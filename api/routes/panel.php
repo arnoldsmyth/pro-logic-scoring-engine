@@ -27,6 +27,7 @@ Route::prefix('panel/api')->middleware('web')->group(function () {
         Route::get('codes', [CodesController::class, 'index']);
         Route::get('codes/statement', [CodesController::class, 'statement']);
         Route::get('codes/statement.csv', [CodesController::class, 'statementCsv']);
+        Route::get('codes/{code}', [CodesController::class, 'show']);
 
         Route::get('assessments', [AssessmentsController::class, 'index']);
         Route::get('assessments/{publicId}', [AssessmentsController::class, 'show']);
@@ -47,6 +48,7 @@ Route::prefix('panel/api')->middleware('web')->group(function () {
             Route::post('codes', [CodesController::class, 'store']);
             Route::patch('codes/{code}', [CodesController::class, 'update']);
             Route::post('codes/{code}/terms', [CodesController::class, 'addTerm']);
+            Route::patch('terms/{term}', [CodesController::class, 'updateTerm']);
             Route::post('terms/{term}/end', [CodesController::class, 'endTerm']);
 
             Route::post('norms/{set:slug}/impact', [NormsController::class, 'impact']);

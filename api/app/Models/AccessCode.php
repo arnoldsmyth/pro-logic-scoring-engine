@@ -35,6 +35,25 @@ class AccessCode extends Model
         return 'ac_'.Str::random(24);
     }
 
+    /** Route binding uses the opaque code string, not the numeric id. */
+    public function getRouteKeyName(): string
+    {
+        return 'code';
+    }
+
+    /**
+     * Once a code has been used to score anything, its `type` and
+     * `allowed_scopes` are locked (prolog-jzy: editing either would
+     * retroactively misrepresent what earlier scoring calls were actually
+     * permitted to do). Metadata fields (name, issued_to, notes, max_uses,
+     * expires_at, active) stay editable regardless — issue a new code
+     * instead of relaxing this.
+     */
+    public function scopeAndTypeLocked(): bool
+    {
+        return $this->uses_count > 0;
+    }
+
     public function isUsable(): bool
     {
         return $this->active

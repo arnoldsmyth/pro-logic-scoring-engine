@@ -6,7 +6,9 @@ import {
 } from 'lucide-react'
 import { AuthProvider, useAuth } from './auth'
 import Assessments from './views/Assessments'
-import Codes from './views/Codes'
+import CodeDetail from './views/codes/CodeDetail'
+import CodeNew from './views/codes/CodeNew'
+import CodesList from './views/codes/CodesList'
 import Content from './views/Content'
 import Dashboard from './views/Dashboard'
 import Keys from './views/Keys'
@@ -141,7 +143,9 @@ function Shell() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/keys" element={<Keys />} />
-            <Route path="/codes" element={<Codes />} />
+            <Route path="/codes" element={<CodesList />} />
+            <Route path="/codes/new" element={<CodeNew />} />
+            <Route path="/codes/:code" element={<CodeDetail />} />
             <Route path="/assessments" element={<Assessments />} />
             <Route path="/norms" element={<Norms />} />
             <Route path="/pipeline" element={<Pipeline />} />
