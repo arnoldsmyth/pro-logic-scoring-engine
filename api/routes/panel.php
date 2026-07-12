@@ -31,6 +31,7 @@ Route::prefix('panel/api')->middleware('web')->group(function () {
         Route::get('assessments', [AssessmentsController::class, 'index']);
         Route::get('assessments/{publicId}', [AssessmentsController::class, 'show']);
         Route::get('assessments/{publicId}/audit/{resultId}', [AssessmentsController::class, 'audit']);
+        Route::get('assessments/{publicId}/person-timeline', [AssessmentsController::class, 'personTimeline']);
 
         Route::get('norms', [NormsController::class, 'index']);
 

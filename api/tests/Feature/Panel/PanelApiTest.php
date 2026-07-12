@@ -84,6 +84,7 @@ class PanelApiTest extends TestCase
         $this->actingAs($this->admin());
 
         $codes = $this->postJson('/panel/api/codes', [
+            'name' => 'Partner X training batch',
             'type' => 'training',
             'product_code' => 'VC18',
             'allowed_scopes' => ['full'],
@@ -108,26 +109,83 @@ class PanelApiTest extends TestCase
         $this->assertFalse(RoyaltyTerm::find($termId)->active);
     }
 
-    public function test_royalty_statement_excludes_derivative_from_totals(): void
+    public function test_royalty_statement_is_terms_driven_and_reports_by_code_name(): void
     {
         $this->actingAs($this->admin());
 
         $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
         $assessment = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en']);
-        $training = AccessCode::create(['code' => 'ac_train', 'type' => 'training', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
-        $derivative = AccessCode::create(['code' => 'ac_deriv', 'type' => 'derivative', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
+        $training = AccessCode::create(['code' => 'ac_train', 'name' => 'Acme training', 'type' => 'training', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
+        // A derivative-labeled code WITH terms still owes — type is a label only (decided 2026-07-11).
+        $derivative = AccessCode::create(['code' => 'ac_deriv', 'name' => 'Enneagram partner', 'type' => 'derivative', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
 
         UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $training->id, 'code_type' => 'training', 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['mcs'], 'fees_due' => [['royalty_term_id' => 1, 'recipient' => 'owner', 'kind' => 'flat_per_report', 'amount' => '12.5', 'currency' => 'USD']], 'created_at' => now()]);
-        UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $derivative->id, 'code_type' => 'derivative', 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['mcs'], 'fees_due' => [], 'created_at' => now()]);
+        UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $derivative->id, 'code_type' => 'derivative', 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['mcs'], 'fees_due' => [['royalty_term_id' => 2, 'recipient' => 'partner', 'kind' => 'flat_per_report', 'amount' => '3', 'currency' => 'USD']], 'created_at' => now()]);
+        UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $training->id, 'code_type' => 'training', 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['pro.role'], 'fees_due' => [], 'created_at' => now()]);
 
         $statement = $this->getJson('/panel/api/codes/statement')->assertOk()->json();
-        $this->assertSame(2, $statement['events']);
-        $this->assertSame(1, $statement['derivative_events_excluded']);
+        $this->assertSame(3, $statement['events']);
+        $this->assertSame(1, $statement['no_fee_events']);
         $this->assertEquals(12.5, $statement['totals_by_recipient']['owner']['USD']);
+        $this->assertEquals(3, $statement['totals_by_recipient']['partner']['USD'], 'derivative-labeled code with terms still owes');
+        $this->assertEquals(12.5, $statement['totals_by_code']['Acme training']['USD']);
+        $this->assertEquals(3, $statement['totals_by_code']['Enneagram partner']['USD']);
 
         $csv = $this->get('/panel/api/codes/statement.csv')->assertOk()->streamedContent();
-        $this->assertStringContainsString('ac_train', $csv);
+        $this->assertStringContainsString('Acme training', $csv);
         $this->assertStringContainsString('no fees', $csv);
+    }
+
+    public function test_language_scoped_terms_only_fire_for_matching_language(): void
+    {
+        $code = AccessCode::create(['code' => 'ac_lang', 'name' => 'FR partner', 'type' => 'training', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
+        $code->royaltyTerms()->create(['recipient' => 'owner', 'kind' => 'flat_per_report', 'amount' => 10, 'currency' => 'USD']);
+        $code->royaltyTerms()->create(['recipient' => 'fr-translator', 'kind' => 'flat_per_report', 'amount' => 2, 'currency' => 'USD', 'language' => 'fr']);
+
+        $en = collect($code->feesDueNow('en'))->pluck('recipient');
+        $fr = collect($code->feesDueNow('fr'))->pluck('recipient');
+
+        $this->assertSame(['owner'], $en->all(), 'fr-scoped translator fee must not fire on en scoring');
+        $this->assertSame(['owner', 'fr-translator'], $fr->all());
+    }
+
+    public function test_on_conversion_term_charges_exactly_once_per_person(): void
+    {
+        $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
+        $code = AccessCode::create(['code' => 'ac_conv', 'name' => 'Lead-gen conversion', 'type' => 'training', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
+        $term = $code->royaltyTerms()->create(['recipient' => 'owner', 'kind' => 'flat_on_conversion', 'amount' => 25, 'currency' => 'USD']);
+
+        // Two assessments, same person (same external_id under one key).
+        $first = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en', 'external_id' => 'order-77']);
+        $second = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en', 'external_id' => 'order-77']);
+
+        $firstFees = $code->feesDueNow('en', $first);
+        $this->assertCount(1, $firstFees, 'first conversion scoring owes the fee');
+
+        // Record the first event the way ScoringService does.
+        UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $code->id, 'code_type' => 'training', 'product_code' => 'VC18', 'assessment_id' => $first->id, 'scopes' => ['mcs'], 'fees_due' => $firstFees, 'created_at' => now()]);
+
+        $this->assertSame([], $code->feesDueNow('en', $second), 'same person rescored: conversion fee never charged twice');
+
+        // A different person still gets charged.
+        $other = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'C', 'lastname' => 'D', 'email' => 'c@d.e', 'language' => 'en', 'external_id' => 'order-88']);
+        $this->assertCount(1, $code->feesDueNow('en', $other));
+        $this->assertSame($term->id, $code->feesDueNow('en', $other)[0]['royalty_term_id']);
+    }
+
+    public function test_person_timeline_links_same_person_assessments(): void
+    {
+        $this->actingAs($this->viewer());
+        $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
+        $a1 = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'Ada', 'lastname' => 'L', 'email' => 'ada@x.com', 'language' => 'en', 'external_id' => 'p-1']);
+        $a2 = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'Ada', 'lastname' => 'L', 'email' => 'ada@x.com', 'language' => 'en', 'external_id' => 'p-1']);
+        Assessment::create(['api_key_id' => $key->id, 'firstname' => 'Bob', 'lastname' => 'M', 'email' => 'bob@x.com', 'language' => 'en', 'external_id' => 'p-2']);
+
+        $timeline = $this->getJson("/panel/api/assessments/{$a1->public_id}/person-timeline")->assertOk()->json();
+        $this->assertSame('external_id', $timeline['identity']['matched_by']);
+        $this->assertCount(2, $timeline['takes']);
+        $this->assertSame([$a1->public_id, $a2->public_id], array_column($timeline['takes'], 'public_id'));
+        $this->assertTrue($timeline['takes'][0]['is_current']);
     }
 
     public function test_norms_view_and_promotion_guard(): void

@@ -4,7 +4,6 @@
 
 1. **Enneagram Map content plan** — who writes the type content; reconcile the two non-canonical "need" labels (11 §2).
 2. **Validation Report 3.0** — commission when? Analytics layer will feed it (11 §6).
-3. **Fee schedules** per code type and royalty statement cadence (07).
 
 ## Decided (with dates)
 
@@ -27,3 +26,4 @@
 - 2026-07-11: Billing runs through Stripe, bank-transfer collection, monthly usage-metered, client self-service account (exact cadence/portal mechanics still open — see below) (07).
 - 2026-07-11: Panel gets a third `norms-reviewer` role (not a full permissions system) gating norm-set promote/retire separately from general admin (08).
 - 2026-07-11: Retake/same-person handling — detect via caller-supplied `external_id`, falling back to exact email match; no answer/session reuse across retakes (each submission independent); "track variance" means a panel timeline view of a person's linked assessments with score deltas (08).
+- 2026-07-11: "Fee schedules per code type" and "royalty statement cadence" (originally item 3 above) superseded rather than answered as originally framed: there's no blanket fee schedule per type since type is now a descriptive label only (07, see above) — fees are negotiated per code/payee on `royalty_terms`; cadence is answered by the Stripe billing decision above (monthly, usage-metered). Tracked under beads epics prolog-4iu and prolog-opw, not as a standalone decision.

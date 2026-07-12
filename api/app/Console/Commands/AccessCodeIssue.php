@@ -9,7 +9,8 @@ use Illuminate\Console\Command;
 
 class AccessCodeIssue extends Command
 {
-    protected $signature = 'code:issue {--type=training : training|bizdev|derivative (docs/07)}
+    protected $signature = 'code:issue {--name= : Human-readable display name for royalty reporting (required)}
+        {--type=training : training|bizdev|derivative — descriptive label only; royalty behavior comes from royalty_terms (docs/07)}
         {--product=VC18 : ProductCatalog entry this code scores}
         {--scopes=full : Comma-separated allowed scopes}
         {--max-uses= : Optional usage cap}
@@ -21,6 +22,12 @@ class AccessCodeIssue extends Command
 
     public function handle(): int
     {
+        if (! $this->option('name')) {
+            $this->error('--name is required (decided 2026-07-11: codes carry a display name for royalty reporting).');
+
+            return self::FAILURE;
+        }
+
         $type = $this->option('type');
         if (! in_array($type, ['training', 'bizdev', 'derivative'], true)) {
             $this->error("type must be training, bizdev or derivative — got '{$type}'.");
@@ -44,6 +51,7 @@ class AccessCodeIssue extends Command
 
         $code = AccessCode::create([
             'code' => AccessCode::generateCode(),
+            'name' => $this->option('name'),
             'type' => $type,
             'product_code' => $this->option('product'),
             'allowed_scopes' => $scopes,
@@ -54,7 +62,7 @@ class AccessCodeIssue extends Command
             'created_by' => get_current_user(),
         ]);
 
-        $this->info("Access code #{$code->id} ({$code->type}, product {$code->product_code}) issued:");
+        $this->info("Access code #{$code->id} '{$code->name}' ({$code->type}, product {$code->product_code}) issued:");
         $this->line("  {$code->code}");
         $this->line('  Allowed scopes: '.implode(', ', $scopes));
 

@@ -106,7 +106,7 @@ class ScoringService
                 'product_code' => $product,
                 'assessment_id' => $assessment->id,
                 'scopes' => $scopes,
-                'fees_due' => $code->feesDueNow(),
+                'fees_due' => $code->feesDueNow($language, $assessment),
                 'created_at' => $scoredAt,
             ]);
 

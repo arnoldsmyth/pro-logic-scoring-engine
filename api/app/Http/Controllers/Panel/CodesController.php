@@ -26,6 +26,7 @@ class CodesController extends Controller
             'codes' => AccessCode::query()->with('royaltyTerms')->withCount('usageEvents')->orderBy('id')->get()->map(fn (AccessCode $c) => [
                 'id' => $c->id,
                 'code' => $c->code,
+                'name' => $c->name,
                 'type' => $c->type,
                 'product_code' => $c->product_code,
                 'allowed_scopes' => $c->allowed_scopes,
@@ -42,6 +43,7 @@ class CodesController extends Controller
                     'kind' => $t->kind,
                     'amount' => (string) $t->amount,
                     'currency' => $t->currency,
+                    'language' => $t->language,
                     'active' => $t->active,
                     'effective_from' => $t->effective_from?->toIso8601String(),
                     'effective_until' => $t->effective_until?->toIso8601String(),
@@ -53,6 +55,7 @@ class CodesController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
             'type' => ['required', 'in:training,bizdev,derivative'],
             'product_code' => ['required', 'string'],
             'allowed_scopes' => ['required', 'array', 'min:1'],
@@ -75,6 +78,7 @@ class CodesController extends Controller
         for ($i = 0; $i < ($data['count'] ?? 1); $i++) {
             $codes[] = AccessCode::create([
                 'code' => AccessCode::generateCode(),
+                'name' => $data['name'].(($data['count'] ?? 1) > 1 ? ' #'.($i + 1) : ''),
                 'type' => $data['type'],
                 'product_code' => $data['product_code'],
                 'allowed_scopes' => $data['allowed_scopes'],
@@ -92,6 +96,7 @@ class CodesController extends Controller
     public function update(Request $request, AccessCode $code): JsonResponse
     {
         $data = $request->validate([
+            'name' => ['string', 'max:255'],
             'active' => ['boolean'],
             'max_uses' => ['nullable', 'integer', 'min:1'],
             'expires_at' => ['nullable', 'date'],
@@ -108,9 +113,10 @@ class CodesController extends Controller
     {
         $data = $request->validate([
             'recipient' => ['required', 'string', 'max:255'],
-            'kind' => ['required', 'in:flat_per_report,percentage_of_price,tiered,subscription'],
+            'kind' => ['required', 'in:flat_per_report,percentage_of_price,tiered,subscription,flat_on_conversion'],
             'amount' => ['required', 'numeric', 'min:0'],
             'currency' => ['string', 'size:3'],
+            'language' => ['nullable', 'in:en,fr,pt'],
             'effective_from' => ['nullable', 'date'],
             'effective_until' => ['nullable', 'date'],
         ]);
@@ -128,32 +134,39 @@ class CodesController extends Controller
 
     /**
      * Royalty statement per recipient/period from usage_events alone
-     * (docs/07). Derivative usage listed separately, excluded from totals.
+     * (docs/07). Royalty behavior is terms-driven (decided 2026-07-11):
+     * events whose fees_due is empty owe nothing — whatever their code
+     * type label says. Totals also break down by code name so statements
+     * report per product/partner batch.
      */
     public function statement(Request $request): JsonResponse
     {
         [$from, $to, $events] = $this->statementEvents($request);
 
         $byRecipient = [];
-        $derivativeEvents = 0;
+        $byCode = [];
+        $noFeeEvents = 0;
         foreach ($events as $e) {
-            if ($e->code_type === 'derivative') {
-                $derivativeEvents++;
+            if ($e->fees_due === []) {
+                $noFeeEvents++;
 
                 continue;
             }
+            $codeLabel = $e->accessCode?->name ?? $e->accessCode?->code ?? '(deleted)';
             foreach ($e->fees_due as $fee) {
                 $r = $fee['recipient'];
                 $cur = $fee['currency'];
                 $byRecipient[$r][$cur] = round(($byRecipient[$r][$cur] ?? 0) + (float) $fee['amount'], 4);
+                $byCode[$codeLabel][$cur] = round(($byCode[$codeLabel][$cur] ?? 0) + (float) $fee['amount'], 4);
             }
         }
 
         return response()->json([
             'period' => ['from' => $from, 'to' => $to],
             'events' => $events->count(),
-            'derivative_events_excluded' => $derivativeEvents,
+            'no_fee_events' => $noFeeEvents,
             'totals_by_recipient' => $byRecipient,
+            'totals_by_code' => $byCode,
         ]);
     }
 
@@ -164,24 +177,27 @@ class CodesController extends Controller
 
         return response()->streamDownload(function () use ($events) {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['date', 'access_code', 'code_type', 'scopes', 'recipient', 'kind', 'amount', 'currency', 'royalty_due']);
+            fputcsv($out, ['date', 'code_name', 'access_code', 'code_type', 'scopes', 'recipient', 'kind', 'amount', 'currency', 'language', 'royalty_due']);
             foreach ($events as $e) {
-                $royaltyDue = $e->code_type !== 'derivative';
+                $codeName = $e->accessCode?->name ?? '';
+                $codeStr = $e->accessCode?->code ?? '(deleted)';
                 foreach ($e->fees_due as $fee) {
                     fputcsv($out, [
                         $e->created_at->toDateString(),
-                        $e->accessCode?->code ?? '(deleted)',
+                        $codeName,
+                        $codeStr,
                         $e->code_type,
                         implode(' ', $e->scopes),
                         $fee['recipient'],
                         $fee['kind'],
                         $fee['amount'],
                         $fee['currency'],
-                        $royaltyDue ? 'yes' : 'no (derivative)',
+                        $fee['language'] ?? 'all',
+                        'yes',
                     ]);
                 }
                 if ($e->fees_due === []) {
-                    fputcsv($out, [$e->created_at->toDateString(), $e->accessCode?->code ?? '(deleted)', $e->code_type, implode(' ', $e->scopes), '', '', '', '', 'no fees']);
+                    fputcsv($out, [$e->created_at->toDateString(), $codeName, $codeStr, $e->code_type, implode(' ', $e->scopes), '', '', '', '', '', 'no fees']);
                 }
             }
             fclose($out);

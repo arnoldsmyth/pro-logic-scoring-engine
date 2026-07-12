@@ -39,11 +39,52 @@ type Audit = {
   content_keys_resolved: unknown[]
 }
 
+type TimelineTake = {
+  public_id: string
+  created_at: string
+  is_current: boolean
+  results: { scopes: string[]; norm_set: string; scored_at: string; results: Record<string, unknown> }[]
+}
+type Timeline = {
+  identity: { matched_by: string; value: string }
+  takes: TimelineTake[]
+}
+
+// Rank deltas between two takes' latest results, for the scopes both share:
+// "societal_change m 3→1". Payloads are {area: rank} for single-dimension
+// scopes and {area: {m,c,s}} for mcs; insights/reflections aren't ranks.
+function takeDeltas(prev: TimelineTake, next: TimelineTake): string[] {
+  const prevRes = prev.results.at(-1)?.results ?? {}
+  const nextRes = next.results.at(-1)?.results ?? {}
+  const deltas: string[] = []
+  for (const scope of Object.keys(nextRes)) {
+    if (scope === 'insights' || scope === 'reflections') continue
+    const a = prevRes[scope] as Record<string, unknown> | undefined
+    const b = nextRes[scope] as Record<string, unknown> | undefined
+    if (!a || !b) continue
+    for (const area of Object.keys(b)) {
+      const av = a[area]
+      const bv = b[area]
+      if (typeof bv === 'object' && bv !== null && typeof av === 'object' && av !== null) {
+        for (const dim of Object.keys(bv as Record<string, unknown>)) {
+          const x = (av as Record<string, unknown>)[dim]
+          const y = (bv as Record<string, unknown>)[dim]
+          if (x !== undefined && x !== y) deltas.push(`${area} ${dim} ${x}→${y}`)
+        }
+      } else if (av !== undefined && av !== bv) {
+        deltas.push(`${area} ${av}→${bv}`)
+      }
+    }
+  }
+  return deltas
+}
+
 export default function Assessments() {
   const [q, setQ] = useState('')
   const [rows, setRows] = useState<Row[]>([])
   const [detail, setDetail] = useState<Detail | null>(null)
   const [audit, setAudit] = useState<Audit | null>(null)
+  const [timeline, setTimeline] = useState<Timeline | null>(null)
 
   const search = () => {
     get<{ assessments: Row[] }>(`/assessments?q=${encodeURIComponent(q)}`).then((r) => setRows(r.assessments))
@@ -52,7 +93,9 @@ export default function Assessments() {
 
   const open = async (id: string) => {
     setAudit(null)
+    setTimeline(null)
     setDetail(await get<Detail>(`/assessments/${id}`))
+    get<Timeline>(`/assessments/${id}/person-timeline`).then(setTimeline)
   }
 
   const loadAudit = async (resultId: number) => {
@@ -142,6 +185,50 @@ export default function Assessments() {
               </ul>
             </div>
           </div>
+        </Card>
+      )}
+
+      {timeline && timeline.takes.length > 1 && (
+        <Card title={`Person timeline — matched by ${timeline.identity.matched_by} (${timeline.identity.value})`}>
+          <p className="mb-3 text-sm text-gray-500">
+            {timeline.takes.length} takes linked to this person. Each take is an independent submission — deltas
+            below compare consecutive takes' latest results where scopes overlap.
+          </p>
+          <ol className="space-y-3">
+            {timeline.takes.map((take, i) => {
+              const deltas = i > 0 ? takeDeltas(timeline.takes[i - 1], take) : []
+              return (
+                <li key={take.public_id} className={`rounded-lg border p-3 text-sm ${take.is_current ? 'border-sky-300 bg-sky-50/50' : 'border-gray-100'}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium text-gray-700">
+                      Take {i + 1}
+                      {take.is_current && <span className="ml-2 text-xs font-normal text-sky-600">(viewing)</span>}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {take.created_at.slice(0, 10)} · {take.results.length} result{take.results.length === 1 ? '' : 's'}
+                      {take.results.at(-1) && ` · norms ${take.results.at(-1)!.norm_set}`}
+                    </span>
+                  </div>
+                  {i > 0 && (
+                    <div className="mt-2 text-xs">
+                      {take.results.length === 0 ? (
+                        <span className="text-gray-400">not scored yet</span>
+                      ) : deltas.length === 0 ? (
+                        <Badge tone="gray">no rank changes vs previous take</Badge>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {deltas.slice(0, 24).map((d) => (
+                            <Badge key={d} tone="amber">{d}</Badge>
+                          ))}
+                          {deltas.length > 24 && <span className="text-gray-400">…and {deltas.length - 24} more</span>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ol>
         </Card>
       )}
 

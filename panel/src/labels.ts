@@ -15,10 +15,20 @@ export const TOOL_LABELS: Record<string, string> = {
   organization: 'Organization',
 }
 
+// Type is a descriptive label only (decided 2026-07-11) — royalty behavior
+// comes from a code's royalty_terms, not its type.
 export const CODE_TYPE_LABELS: Record<string, string> = {
   training: 'Training',
   bizdev: 'Biz Dev',
-  derivative: 'Derivative (no royalty)',
+  derivative: 'Derivative',
+}
+
+export const TERM_KIND_LABELS: Record<string, string> = {
+  flat_per_report: 'Flat per report',
+  percentage_of_price: 'Percentage of price',
+  tiered: 'Tiered',
+  subscription: 'Subscription',
+  flat_on_conversion: 'On conversion (once per person)',
 }
 
 export const SCOPE_LABELS: Record<string, string> = {

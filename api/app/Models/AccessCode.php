@@ -43,25 +43,71 @@ class AccessCode extends Model
     }
 
     /**
-     * Royalty terms in force right now — one fees_due row per term
-     * (docs/07: a code can pay more than one party, evaluated independently).
+     * Royalty terms in force for this scoring event — one fees_due row per
+     * matching term (docs/07: a code can pay more than one party, evaluated
+     * independently). Royalty behavior is driven entirely by these rows;
+     * the code's `type` is a descriptive label (decided 2026-07-11).
      *
-     * @return list<array{royalty_term_id: int, recipient: string, kind: string, amount: string, currency: string}>
+     * - Language-scoped terms (term.language non-null) only fire when the
+     *   event's language matches — e.g. a translator fee on fr reports.
+     * - `flat_on_conversion` terms fire the FIRST time this person (same
+     *   external_id per key, email fallback) is charged under this term,
+     *   then never again — the pay-once-per-order conversion royalty.
+     *
+     * @return list<array{royalty_term_id: int, recipient: string, kind: string, amount: string, currency: string, language: ?string}>
      */
-    public function feesDueNow(): array
+    public function feesDueNow(?string $language = null, ?Assessment $assessment = null): array
     {
-        return $this->royaltyTerms()
+        $terms = $this->royaltyTerms()
             ->where('active', true)
             ->where(fn ($q) => $q->whereNull('effective_from')->orWhere('effective_from', '<=', now()))
             ->where(fn ($q) => $q->whereNull('effective_until')->orWhere('effective_until', '>', now()))
-            ->get()
+            ->when($language !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('language')->orWhere('language', $language)))
+            ->get();
+
+        $conversionKinds = $terms->where('kind', 'flat_on_conversion');
+        $alreadyCharged = $conversionKinds->isNotEmpty() && $assessment !== null
+            ? $this->termsAlreadyChargedForPerson($assessment, $conversionKinds->pluck('id')->all())
+            : [];
+
+        return $terms
+            ->reject(fn (RoyaltyTerm $t) => $t->kind === 'flat_on_conversion' && in_array($t->id, $alreadyCharged, true))
             ->map(fn (RoyaltyTerm $t) => [
                 'royalty_term_id' => $t->id,
                 'recipient' => $t->recipient,
                 'kind' => $t->kind,
                 'amount' => (string) $t->amount,
                 'currency' => $t->currency,
+                'language' => $t->language,
             ])
+            ->values()
             ->all();
+    }
+
+    /**
+     * Which of the given term ids have already produced a fee for this
+     * person, across every assessment linked to them (charged exactly once
+     * per person — docs/07 conversion royalty).
+     *
+     * @param  list<int>  $termIds
+     * @return list<int>
+     */
+    private function termsAlreadyChargedForPerson(Assessment $assessment, array $termIds): array
+    {
+        $assessmentIds = $assessment->samePersonQuery()->pluck('id');
+
+        $charged = [];
+        UsageEvent::query()
+            ->whereIn('assessment_id', $assessmentIds)
+            ->get(['fees_due'])
+            ->each(function (UsageEvent $event) use (&$charged, $termIds) {
+                foreach ($event->fees_due as $fee) {
+                    if (in_array((int) ($fee['royalty_term_id'] ?? 0), $termIds, true)) {
+                        $charged[] = (int) $fee['royalty_term_id'];
+                    }
+                }
+            });
+
+        return array_values(array_unique($charged));
     }
 }

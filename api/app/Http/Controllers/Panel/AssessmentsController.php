@@ -79,6 +79,43 @@ class AssessmentsController extends Controller
         ]);
     }
 
+    /**
+     * Person timeline (decided 2026-07-11): every assessment linked to the
+     * same person — caller-supplied external_id per key, exact-email
+     * fallback — ordered over time with their results, so the panel can
+     * show retakes and score deltas between takes. Each take stays a fully
+     * independent submission; only this reporting link exists.
+     */
+    public function personTimeline(string $publicId): JsonResponse
+    {
+        $a = Assessment::query()->where('public_id', $publicId)->firstOrFail();
+
+        $takes = $a->samePersonQuery()
+            ->with('results')
+            ->orderBy('created_at')
+            ->get()
+            ->map(fn (Assessment $take) => [
+                'public_id' => $take->public_id,
+                'external_id' => $take->external_id,
+                'email' => $take->email,
+                'created_at' => $take->created_at->toIso8601String(),
+                'is_current' => $take->id === $a->id,
+                'results' => $take->results->sortBy('scored_at')->values()->map(fn ($r) => [
+                    'scopes' => $r->scopes,
+                    'norm_set' => $r->norm_set,
+                    'scored_at' => $r->scored_at->toIso8601String(),
+                    'results' => $r->results,
+                ])->all(),
+            ]);
+
+        return response()->json([
+            'identity' => $a->external_id !== null && $a->external_id !== ''
+                ? ['matched_by' => 'external_id', 'value' => $a->external_id]
+                : ['matched_by' => 'email', 'value' => $a->email],
+            'takes' => $takes->all(),
+        ]);
+    }
+
     /** The audit-trace walkthrough data (docs/08: UI over results/audit). */
     public function audit(string $publicId, int $resultId): JsonResponse
     {

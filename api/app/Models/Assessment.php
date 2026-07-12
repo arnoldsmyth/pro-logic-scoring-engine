@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -49,5 +50,25 @@ class Assessment extends Model
     public function getRouteKeyName(): string
     {
         return 'public_id';
+    }
+
+    /**
+     * Assessments belonging to the same person under the same API key
+     * (decided 2026-07-11): caller-supplied external_id is the primary
+     * identity signal, exact email match is the fallback. No fuzzy
+     * matching. Includes this assessment itself.
+     *
+     * @return Builder<self>
+     */
+    public function samePersonQuery(): Builder
+    {
+        $query = self::query()->where('api_key_id', $this->api_key_id);
+
+        if ($this->external_id !== null && $this->external_id !== '') {
+            return $query->where('external_id', $this->external_id);
+        }
+
+        return $query->where('email', $this->email)
+            ->where(fn ($q) => $q->whereNull('external_id')->orWhere('external_id', ''));
     }
 }
