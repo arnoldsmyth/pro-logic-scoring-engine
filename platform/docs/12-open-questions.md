@@ -21,3 +21,9 @@
 - 2026-07-11: Non-binary/unspecified gender policy — use pooled norms (06 §Launch sets); confirms pooled-v1 as the answer for gender-unspecified respondents.
 - 2026-07-11: Git hosting + repo creation — resolved; repo exists at github.com/arnoldsmyth/pro-logic-scoring-engine (09).
 - 2026-07-11: Standalone Role Report carries forward as a v2 product/scope preset; same treatment as MCS Development — `pro.role` scope already exists (04), so this is a config/access-code registration, not an engine build (11 §5).
+- 2026-07-11: Access-code `type` is a descriptive label only; royalty-due-or-not is driven purely by whether a code has active `royalty_terms` (07).
+- 2026-07-11: Access codes get a free-text `name` field set at issue time, for royalty-statement reporting; not derived from product+client (07).
+- 2026-07-11: Royalty recipients modeled as a separate `payees` table from paying `clients` (optional nullable link between them when the same party is both) (07).
+- 2026-07-11: Billing runs through Stripe, bank-transfer collection, monthly usage-metered, client self-service account (exact cadence/portal mechanics still open — see below) (07).
+- 2026-07-11: Panel gets a third `norms-reviewer` role (not a full permissions system) gating norm-set promote/retire separately from general admin (08).
+- 2026-07-11: Retake/same-person handling — detect via caller-supplied `external_id`, falling back to exact email match; no answer/session reuse across retakes (each submission independent); "track variance" means a panel timeline view of a person's linked assessments with score deltas (08).

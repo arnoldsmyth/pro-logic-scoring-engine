@@ -1,14 +1,14 @@
 # 08 — Control Panel (React SPA)
 
-Admin UI on the Laravel API. Auth: Laravel Sanctum (separate from API bearer keys). Roles: admin, viewer (extendable).
+Admin UI on the Laravel API. Auth: Laravel Sanctum (separate from API bearer keys). Roles: admin, viewer, **norms-reviewer** (decided 2026-07-11: promoting a norm set changes live scoring output, so promote/retire actions are gated on this narrower role rather than general admin — a third role value, not a full named-permissions system. All authenticated panel users keep read access to norms/impact reports regardless of role).
 
 ## Views
 
 1. **Dashboard** — calls/day, scores by scope, error rates, latency, assessment volumes.
-2. **Clients & API keys** — create/rotate/revoke keys, per-key scopes + rate limits + default access code, test vs live keys, webhook config.
+2. **Clients & API keys** — create/rotate/revoke keys, per-key scopes + rate limits + default access code, test vs live keys, webhook config. Keys and codes are issued against a normalized `client` record (07), not free-typed.
 3. **Access codes & royalties** — per 07-access-codes-royalties.md (issue/bulk/revoke, usage by code type, royalty statements, derivative usage shown but excluded from totals).
-4. **Assessments** — search by external_id/email/date; per-assessment status (tools received, scopes scored, results, audit trace).
-5. **Norms & analytics** — active/candidate/retired norm sets with provenance; sample-size accumulation per language; drift charts; candidate impact reports; promote/retire actions (06-norms.md).
+4. **Assessments** — search by external_id/email/date; per-assessment status (tools received, scopes scored, results, audit trace). **Person timeline** (decided 2026-07-11): assessments for the same person — matched by caller-supplied `external_id`, falling back to exact email match — are linked for reporting; a dedicated view lists a person's assessments across time with score deltas between takes. No session/answer reuse on retake — each submission stays fully independent, only the reporting link is new.
+5. **Norms & analytics** — active/candidate/retired norm sets with provenance; sample-size accumulation per language; drift charts; candidate impact reports; promote/retire actions gated on the `norms-reviewer` role (06-norms.md).
 6. **Content** — browse rule sets, translations, question text per language (read-only in v1).
 
 ## "Under the hood" documentation (first-class requirement)
