@@ -35,14 +35,14 @@ class StatsController extends Controller
             foreach ($e->scopes as $scope) {
                 $byScope[$scope] = ($byScope[$scope] ?? 0) + 1;
             }
-            $byCodeType[$e->code_type] = ($byCodeType[$e->code_type] ?? 0) + 1;
+            $byCodeType[$e->code_type] = ($byCodeType[$e->code_type] ?? 0) + 1; // code_type column carries order_type
         }
         arsort($byScope);
 
         return response()->json([
             'scoring_calls_by_day' => $byDay,
             'scores_by_scope' => $byScope,
-            'scores_by_code_type' => $byCodeType,
+            'scores_by_order_type' => $byCodeType,
             'totals' => [
                 'assessments' => Assessment::count(),
                 'scored_results' => ScoredResult::count(),

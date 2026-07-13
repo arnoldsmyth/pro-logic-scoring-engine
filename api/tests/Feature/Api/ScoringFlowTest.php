@@ -4,9 +4,10 @@ namespace Tests\Feature\Api;
 
 use App\Models\AccessCode;
 use App\Models\ApiKey;
+use App\Models\Charge;
 use App\Models\NormSample;
 use App\Models\NormSet;
-use App\Models\RoyaltyTerm;
+use App\Models\PayoutTerm;
 use App\Models\UsageEvent;
 use App\Models\WebhookDelivery;
 use App\Scoring\GoldenMaster\GoldenRepository;
@@ -72,7 +73,7 @@ class ScoringFlowTest extends TestCase
         ]);
         $code = AccessCode::create([
             'code' => AccessCode::generateCode(),
-            'type' => 'bizdev',
+            'order_type' => 'complimentary',
             'product_code' => 'VC18',
             'allowed_scopes' => ['pro.org'],
         ]);
@@ -125,7 +126,7 @@ class ScoringFlowTest extends TestCase
         ApiKey::create([...$attributes, 'name' => 'norms-e2e']);
         $code = AccessCode::create([
             'code' => AccessCode::generateCode(),
-            'type' => 'training',
+            'order_type' => 'training',
             'product_code' => 'VC18',
             'allowed_scopes' => ['full'],
         ]);
@@ -183,14 +184,17 @@ class ScoringFlowTest extends TestCase
         $key = ApiKey::create([...$attributes, 'name' => 'golden-e2e']);
         $code = AccessCode::create([
             'code' => AccessCode::generateCode(),
-            'type' => 'training',
+            'order_type' => 'sale',
+            'charge_amount' => '12.5',
             'product_code' => 'VC18',
             'allowed_scopes' => ['full'],
         ]);
-        RoyaltyTerm::create([
+        PayoutTerm::create([
             'access_code_id' => $code->id,
             'recipient' => 'content-owner',
-            'kind' => 'flat_per_report',
+            'category' => 'royalty',
+            'payout_type' => 'pro_d_royalty',
+            'kind' => 'flat',
             'amount' => '12.5000',
             'currency' => 'USD',
         ]);
@@ -239,10 +243,13 @@ class ScoringFlowTest extends TestCase
         // Metering: one usage event, fees from the code's active terms.
         $event = UsageEvent::query()->latest('id')->first();
         $this->assertSame($code->id, $event->access_code_id);
-        $this->assertSame('training', $event->code_type);
+        $this->assertSame('sale', $event->code_type);
         $this->assertCount(1, $event->fees_due);
         $this->assertSame('content-owner', $event->fees_due[0]['recipient']);
         $this->assertSame(1, $code->refresh()->uses_count);
+        $charge = Charge::query()->where('usage_event_id', $event->id)->first();
+        $this->assertEquals(12.5, (float) $charge->amount);
+        $this->assertCount(1, $charge->payouts()->get());
 
         // Re-render: strings format resolves content, same envelope shape.
         $strings = $this->getJson("/v2/assessments/{$id}/results?format=strings")
@@ -277,7 +284,7 @@ class ScoringFlowTest extends TestCase
         ApiKey::create([...$attributes, 'name' => 'partial-e2e']);
         $code = AccessCode::create([
             'code' => AccessCode::generateCode(),
-            'type' => 'derivative',
+            'order_type' => 'complimentary',
             'product_code' => 'VC18',
             'allowed_scopes' => ['pro.role', 'pro.org'],
         ]);
@@ -304,7 +311,9 @@ class ScoringFlowTest extends TestCase
 
         // Derivative code: usage metered, no fees due (docs/07).
         $event = UsageEvent::query()->latest('id')->first();
-        $this->assertSame('derivative', $event->code_type);
+        $this->assertSame('complimentary', $event->code_type);
         $this->assertSame([], $event->fees_due);
+        $charge = Charge::query()->where('usage_event_id', $event->id)->first();
+        $this->assertEquals(0, (float) $charge->amount, 'complimentary usage logs a \$0 charge');
     }
 }

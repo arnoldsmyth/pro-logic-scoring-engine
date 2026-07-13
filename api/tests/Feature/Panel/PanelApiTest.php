@@ -6,7 +6,7 @@ use App\Models\AccessCode;
 use App\Models\ApiKey;
 use App\Models\Assessment;
 use App\Models\NormSet;
-use App\Models\RoyaltyTerm;
+use App\Models\PayoutTerm;
 use App\Models\UsageEvent;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -79,13 +79,14 @@ class PanelApiTest extends TestCase
         $this->assertNull(ApiKey::findByToken($rotated['token']), 'revoked key must stop authenticating');
     }
 
-    public function test_admin_code_lifecycle_with_terms(): void
+    public function test_admin_code_lifecycle_with_payout_schedule(): void
     {
         $this->actingAs($this->admin());
 
         $codes = $this->postJson('/panel/api/codes', [
-            'name' => 'Partner X training batch',
-            'type' => 'training',
+            'name' => 'Partner X sales batch',
+            'order_type' => 'sale',
+            'charge_amount' => 100,
             'product_code' => 'VC18',
             'allowed_scopes' => ['full'],
             'count' => 3,
@@ -96,30 +97,43 @@ class PanelApiTest extends TestCase
 
         $termId = $this->postJson("/panel/api/codes/{$codeStr}/terms", [
             'recipient' => 'content-owner',
-            'kind' => 'flat_per_report',
+            'category' => 'royalty',
+            'payout_type' => 'pro_d_royalty',
+            'kind' => 'flat',
             'amount' => 10,
         ])->assertStatus(201)->json('id');
 
-        $detail = $this->getJson("/panel/api/codes/{$codeStr}")->assertOk()->json();
-        $this->assertCount(1, $detail['royalty_terms']);
-        $this->assertFalse($detail['royalty_terms'][0]['locked'], 'a never-charged term must be editable');
+        // Exactly one active residual line allowed.
+        $this->postJson("/panel/api/codes/{$codeStr}/terms", [
+            'recipient' => 'us',
+            'category' => 'residual',
+            'payout_type' => 'residual_margin',
+        ])->assertStatus(201);
+        $this->postJson("/panel/api/codes/{$codeStr}/terms", [
+            'recipient' => 'us-again',
+            'category' => 'residual',
+        ])->assertStatus(422)->assertJsonPath('error.code', 'residual_exists');
 
-        // Unused term: freely editable.
+        $detail = $this->getJson("/panel/api/codes/{$codeStr}")->assertOk()->json();
+        $this->assertCount(2, $detail['payout_terms']);
+        $this->assertFalse($detail['payout_terms'][0]['locked'], 'a line with no payouts yet must be editable');
+
+        // Unused line: freely editable.
         $this->patchJson("/panel/api/terms/{$termId}", ['amount' => 15])
             ->assertOk()
             ->assertJsonPath('amount', '15');
 
         $this->postJson("/panel/api/terms/{$termId}/end")->assertOk();
-        $this->assertFalse(RoyaltyTerm::find($termId)->active);
+        $this->assertFalse(PayoutTerm::find($termId)->active);
     }
 
-    public function test_code_metadata_editable_but_scope_and_type_lock_after_first_use(): void
+    public function test_code_metadata_editable_but_scope_and_order_type_lock_after_first_use(): void
     {
         $this->actingAs($this->admin());
         $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
-        $code = AccessCode::create(['code' => 'ac_lock', 'name' => 'Lock test', 'type' => 'training', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
+        $code = AccessCode::create(['code' => 'ac_lock', 'name' => 'Lock test', 'order_type' => 'training', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
 
-        // Fresh, unused code: type/scopes editable.
+        // Fresh, unused code: order_type/scopes editable.
         $this->getJson('/panel/api/codes/ac_lock')->assertOk()->assertJsonPath('scope_and_type_locked', false);
         $this->patchJson('/panel/api/codes/ac_lock', ['allowed_scopes' => ['pro.role']])->assertOk();
 
@@ -129,7 +143,7 @@ class PanelApiTest extends TestCase
         $code->increment('uses_count');
 
         $this->getJson('/panel/api/codes/ac_lock')->assertOk()->assertJsonPath('scope_and_type_locked', true);
-        $this->patchJson('/panel/api/codes/ac_lock', ['type' => 'bizdev'])
+        $this->patchJson('/panel/api/codes/ac_lock', ['order_type' => 'sale'])
             ->assertStatus(422)
             ->assertJsonPath('error.code', 'locked');
 
@@ -139,90 +153,106 @@ class PanelApiTest extends TestCase
             ->assertJsonPath('name', 'Renamed');
     }
 
-    public function test_charged_royalty_term_cannot_be_edited(): void
+    public function test_payout_line_locks_once_it_has_accrued(): void
     {
         $this->actingAs($this->admin());
         $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
-        $code = AccessCode::create(['code' => 'ac_termlock', 'name' => 'Term lock test', 'type' => 'training', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
-        $term = $code->royaltyTerms()->create(['recipient' => 'owner', 'kind' => 'flat_per_report', 'amount' => 10, 'currency' => 'USD']);
+        $code = AccessCode::create(['code' => 'ac_termlock', 'name' => 'Line lock test', 'order_type' => 'sale', 'charge_amount' => 50, 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
+        $term = $code->payoutTerms()->create(['recipient' => 'owner', 'category' => 'royalty', 'payout_type' => 'pro_d_royalty', 'kind' => 'flat', 'amount' => 10, 'currency' => 'USD']);
 
+        // Simulate a real charge having split into this line.
         $assessment = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en']);
-        UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $code->id, 'code_type' => 'training', 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['mcs'], 'fees_due' => [['royalty_term_id' => $term->id, 'recipient' => 'owner', 'kind' => 'flat_per_report', 'amount' => '10', 'currency' => 'USD']], 'created_at' => now()]);
+        $event = UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $code->id, 'code_type' => 'sale', 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['mcs'], 'fees_due' => [], 'created_at' => now()]);
+        $code->recordCharge($event, $assessment, 'en');
 
-        $this->getJson('/panel/api/codes/ac_termlock')->assertOk()->assertJsonPath('royalty_terms.0.locked', true);
+        $this->getJson('/panel/api/codes/ac_termlock')->assertOk()->assertJsonPath('payout_terms.0.locked', true);
         $this->patchJson("/panel/api/terms/{$term->id}", ['amount' => 999])
             ->assertStatus(422)
             ->assertJsonPath('error.code', 'locked');
 
         // End-and-replace is still the correct path forward.
         $this->postJson("/panel/api/terms/{$term->id}/end")->assertOk();
-        $newTermId = $this->postJson('/panel/api/codes/ac_termlock/terms', ['recipient' => 'owner', 'kind' => 'flat_per_report', 'amount' => 999])
+        $newTermId = $this->postJson('/panel/api/codes/ac_termlock/terms', ['recipient' => 'owner', 'category' => 'royalty', 'kind' => 'flat', 'amount' => 999])
             ->assertStatus(201)->json('id');
         $this->assertNotSame($term->id, $newTermId);
     }
 
-    public function test_royalty_statement_is_terms_driven_and_reports_by_code_name(): void
+    public function test_charge_ledger_first_real_then_zero_repeats_per_order(): void
+    {
+        $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
+        $sale = AccessCode::create(['code' => 'ac_sale', 'name' => 'Sale code', 'order_type' => 'sale', 'charge_amount' => 100, 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
+        $sale->payoutTerms()->create(['recipient' => 'owner', 'category' => 'royalty', 'payout_type' => 'pro_d_royalty', 'kind' => 'percent_of_charge', 'amount' => 20, 'currency' => 'USD']);
+        $sale->payoutTerms()->create(['recipient' => 'fr-translator', 'category' => 'fee', 'payout_type' => 'language_fee', 'kind' => 'flat', 'amount' => 5, 'currency' => 'USD', 'language' => 'fr']);
+        $sale->payoutTerms()->create(['recipient' => 'us', 'category' => 'residual', 'payout_type' => 'residual_margin', 'kind' => 'flat', 'amount' => 0, 'currency' => 'USD']);
+
+        $mkEvent = function ($assessment) use ($key, $sale) {
+            return UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $sale->id, 'code_type' => 'sale', 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['mcs'], 'fees_due' => [], 'created_at' => now()]);
+        };
+
+        // First usage for order-1 (en): real charge, royalty 20% + residual 80.
+        $a1 = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en', 'external_id' => 'order-1']);
+        $charge1 = $sale->recordCharge($mkEvent($a1), $a1, 'en');
+        $this->assertEquals(100, (float) $charge1->amount);
+        $payouts = $charge1->payouts()->orderBy('id')->get();
+        $this->assertCount(2, $payouts, 'fr language fee must not fire on an en event');
+        $this->assertEquals(20, (float) $payouts[0]->amount); // 20% of 100
+        $this->assertSame('residual', $payouts[1]->category);
+        $this->assertEquals(80, (float) $payouts[1]->amount, 'residual absorbs the balance');
+        $this->assertSame('accrued', $payouts[1]->status);
+
+        // Same order rescored (update): $0 repeat referencing the original.
+        $a2 = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en', 'external_id' => 'order-1']);
+        $charge2 = $sale->recordCharge($mkEvent($a2), $a2, 'en');
+        $this->assertEquals(0, (float) $charge2->amount, 'repeat usage of the same order never charges again');
+        $this->assertSame($charge1->id, $charge2->original_charge_id);
+        $this->assertCount(0, $charge2->payouts()->get());
+
+        // A different order charges again — and in fr the language fee fires.
+        $a3 = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'C', 'lastname' => 'D', 'email' => 'c@d.e', 'language' => 'fr', 'external_id' => 'order-2']);
+        $charge3 = $sale->recordCharge($mkEvent($a3), $a3, 'fr');
+        $this->assertEquals(100, (float) $charge3->amount);
+        $fr = $charge3->payouts()->get()->keyBy('recipient');
+        $this->assertEquals(5, (float) $fr['fr-translator']->amount);
+        $this->assertEquals(75, (float) $fr['us']->amount, 'residual shrinks when the language fee fires: 100 - 20 - 5');
+    }
+
+    public function test_statement_reports_ledger_and_infers_conversion(): void
     {
         $this->actingAs($this->admin());
-
         $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
-        $assessment = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en']);
-        $training = AccessCode::create(['code' => 'ac_train', 'name' => 'Acme training', 'type' => 'training', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
-        // A derivative-labeled code WITH terms still owes — type is a label only (decided 2026-07-11).
-        $derivative = AccessCode::create(['code' => 'ac_deriv', 'name' => 'Enneagram partner', 'type' => 'derivative', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
+        $lead = AccessCode::create(['code' => 'ac_lead', 'name' => 'Lead taster', 'order_type' => 'lead', 'charge_amount' => 0, 'product_code' => 'VC18', 'allowed_scopes' => ['mcs.m']]);
+        $sale = AccessCode::create(['code' => 'ac_sale2', 'name' => 'Full product sale', 'order_type' => 'sale', 'charge_amount' => 100, 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
+        $sale->payoutTerms()->create(['recipient' => 'owner', 'category' => 'royalty', 'payout_type' => 'pro_d_royalty', 'kind' => 'flat', 'amount' => 30, 'currency' => 'USD']);
+        $sale->payoutTerms()->create(['recipient' => 'us', 'category' => 'residual', 'payout_type' => 'residual_margin', 'kind' => 'flat', 'amount' => 0, 'currency' => 'USD']);
 
-        UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $training->id, 'code_type' => 'training', 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['mcs'], 'fees_due' => [['royalty_term_id' => 1, 'recipient' => 'owner', 'kind' => 'flat_per_report', 'amount' => '12.5', 'currency' => 'USD']], 'created_at' => now()]);
-        UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $derivative->id, 'code_type' => 'derivative', 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['mcs'], 'fees_due' => [['royalty_term_id' => 2, 'recipient' => 'partner', 'kind' => 'flat_per_report', 'amount' => '3', 'currency' => 'USD']], 'created_at' => now()]);
-        UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $training->id, 'code_type' => 'training', 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['pro.role'], 'fees_due' => [], 'created_at' => now()]);
+        $mkEvent = function ($assessment, $code) use ($key) {
+            return UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $code->id, 'code_type' => $code->order_type, 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['mcs'], 'fees_due' => [], 'created_at' => now()]);
+        };
+
+        // order-10: lead, later converts to sale. order-11: unconverted lead.
+        $l1 = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en', 'external_id' => 'order-10']);
+        $lead->recordCharge($mkEvent($l1, $lead), $l1, 'en');
+        $s1 = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en', 'external_id' => 'order-10']);
+        $sale->recordCharge($mkEvent($s1, $sale), $s1, 'en');
+        $l2 = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'E', 'lastname' => 'F', 'email' => 'e@f.g', 'language' => 'en', 'external_id' => 'order-11']);
+        $lead->recordCharge($mkEvent($l2, $lead), $l2, 'en');
 
         $statement = $this->getJson('/panel/api/codes/statement')->assertOk()->json();
-        $this->assertSame(3, $statement['events']);
-        $this->assertSame(1, $statement['no_fee_events']);
-        $this->assertEquals(12.5, $statement['totals_by_recipient']['owner']['USD']);
-        $this->assertEquals(3, $statement['totals_by_recipient']['partner']['USD'], 'derivative-labeled code with terms still owes');
-        $this->assertEquals(12.5, $statement['totals_by_code']['Acme training']['USD']);
-        $this->assertEquals(3, $statement['totals_by_code']['Enneagram partner']['USD']);
+        $this->assertSame(3, $statement['charges']);
+        $this->assertSame(2, $statement['by_order_type']['lead']['usages']);
+        $this->assertEquals(0, $statement['by_order_type']['lead']['charged']['USD']);
+        $this->assertEquals(100, $statement['by_order_type']['sale']['charged']['USD']);
+        $this->assertEquals(30, $statement['payouts_by_recipient']['owner']['USD']);
+        $this->assertEquals(70, $statement['payouts_by_recipient']['us']['USD']);
+        $this->assertEquals(100, $statement['payouts_by_code']['Full product sale']['USD']);
+        $this->assertSame(2, $statement['conversion']['leads']);
+        $this->assertSame(1, $statement['conversion']['converted']);
+        $this->assertEquals(50.0, $statement['conversion']['rate']);
 
         $csv = $this->get('/panel/api/codes/statement.csv')->assertOk()->streamedContent();
-        $this->assertStringContainsString('Acme training', $csv);
-        $this->assertStringContainsString('no fees', $csv);
-    }
-
-    public function test_language_scoped_terms_only_fire_for_matching_language(): void
-    {
-        $code = AccessCode::create(['code' => 'ac_lang', 'name' => 'FR partner', 'type' => 'training', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
-        $code->royaltyTerms()->create(['recipient' => 'owner', 'kind' => 'flat_per_report', 'amount' => 10, 'currency' => 'USD']);
-        $code->royaltyTerms()->create(['recipient' => 'fr-translator', 'kind' => 'flat_per_report', 'amount' => 2, 'currency' => 'USD', 'language' => 'fr']);
-
-        $en = collect($code->feesDueNow('en'))->pluck('recipient');
-        $fr = collect($code->feesDueNow('fr'))->pluck('recipient');
-
-        $this->assertSame(['owner'], $en->all(), 'fr-scoped translator fee must not fire on en scoring');
-        $this->assertSame(['owner', 'fr-translator'], $fr->all());
-    }
-
-    public function test_on_conversion_term_charges_exactly_once_per_person(): void
-    {
-        $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
-        $code = AccessCode::create(['code' => 'ac_conv', 'name' => 'Lead-gen conversion', 'type' => 'training', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
-        $term = $code->royaltyTerms()->create(['recipient' => 'owner', 'kind' => 'flat_on_conversion', 'amount' => 25, 'currency' => 'USD']);
-
-        // Two assessments, same person (same external_id under one key).
-        $first = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en', 'external_id' => 'order-77']);
-        $second = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en', 'external_id' => 'order-77']);
-
-        $firstFees = $code->feesDueNow('en', $first);
-        $this->assertCount(1, $firstFees, 'first conversion scoring owes the fee');
-
-        // Record the first event the way ScoringService does.
-        UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $code->id, 'code_type' => 'training', 'product_code' => 'VC18', 'assessment_id' => $first->id, 'scopes' => ['mcs'], 'fees_due' => $firstFees, 'created_at' => now()]);
-
-        $this->assertSame([], $code->feesDueNow('en', $second), 'same person rescored: conversion fee never charged twice');
-
-        // A different person still gets charged.
-        $other = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'C', 'lastname' => 'D', 'email' => 'c@d.e', 'language' => 'en', 'external_id' => 'order-88']);
-        $this->assertCount(1, $code->feesDueNow('en', $other));
-        $this->assertSame($term->id, $code->feesDueNow('en', $other)[0]['royalty_term_id']);
+        $this->assertStringContainsString('Full product sale', $csv);
+        $this->assertStringContainsString('residual_margin', $csv);
+        $this->assertStringContainsString('order-11', $csv);
     }
 
     public function test_person_timeline_links_same_person_assessments(): void

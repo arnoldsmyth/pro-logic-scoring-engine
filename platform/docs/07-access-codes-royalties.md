@@ -1,32 +1,53 @@
-# 07 — Access Codes, Royalties, Billing
+# 07 — Access Codes, Charges & Payouts
 
-Royalty is **per report/result, not always due**. Access is managed by a **code system**: a code identifies which catalog product (ProductCatalog, 04) it scores and grants permission to specific data scopes. The API returns data only; "report" for royalty purposes = a scored result delivered under a code.
+> Canonical articulation (agreed 2026-07-12): `development-assets/charges-payouts-data-model.md`. This doc summarizes the implemented model.
 
-A code is never itself a product's brand name — it's an opaque identifier that maps to a catalog entry. A single product can also be issued under more than one code (e.g. different terms per partner).
+Access is managed by a **code system**: a code identifies which catalog product (ProductCatalog, 04) it scores and grants permission to specific data scopes. A code is never itself a product's brand name — it's an opaque identifier that maps to a catalog entry, with a free-text internal `name` for reporting. A single product can be issued under more than one code (different terms per partner).
 
-## Code types (descriptive label, not a royalty mechanism)
+## Order types (reporting dimension, never a gate)
 
-| Code type | Purpose |
+| Order type | Today |
 |---|---|
-| `training` | training/certification uses |
-| `bizdev` | business development / demos / partner enablement |
-| `derivative` | derivative products (e.g. Enneagram Map, MCS-Dev-based offerings) |
+| `training` | training/certification uses — currently $0 |
+| `complimentary` | demos / partner enablement — currently $0 |
+| `lead` | free taster subset given as advertising lead-in — currently $0 |
+| `sale` | paid orders — the only type currently generating a real charge |
 
-**Decided 2026-07-11:** `type` is a descriptive/internal label only — it does not drive royalty behavior. Whether a code owes royalty is determined purely by whether it has active `royalty_terms` rows; a code with zero active terms owes nothing, regardless of its type. (Previously `derivative` was special-cased as "no royalty due" — in practice every issued code carries terms or doesn't, so the type field was never the actual mechanism.) Every usage event still records the code type so reporting can slice by it. Code type is immutable after issue (issue a new code to change the label).
+Every order type can carry a charge and payouts — the current $0 values on training/complimentary/lead are business reality, not mechanism. Order type is immutable once a code has scored anything (it drives conversion reporting).
 
-## Data model
+## Charges (the billable-event ledger)
 
-- `access_codes`: code (unguessable), **name** (free-text, internal-only display label set at issue time — e.g. "Acme Corp – Q3 training batch"; distinct from `code`, which stays unguessable and is never a brand name), type (training|bizdev|derivative, label only per above), product_code (ProductCatalog entry it scores), allowed scopes, max_uses / expires_at, **client_id** (FK to `clients`, replacing free-text `issued_to`), notes, active flag, created_by. **No single fee field** — see `royalty_terms` below.
-- `clients`: normalized entity for anyone who pays (holds API keys and/or access codes) — name, billing contact/email, notes, active flag, later a `stripe_customer_id`. Replaces the free-text `api_keys.name` (labeled "Client name" in the panel) and `access_codes.issued_to`.
-- `payees`: normalized entity for anyone who gets paid via a royalty term (content owners, translators, distribution partners) — kept **separate from `clients`**, since a payee is often not a billed client at all. A payee MAY optionally link to a `client` record (nullable `client_id` on `payees`) when the same real-world party is both a paying client and a royalty recipient — that link is optional, not assumed.
-- `royalty_terms`: access_code_id, **payee_id** (FK to `payees`, replacing free-text `recipient`), kind (flat_per_report | percentage_of_price | tiered | subscription | **flat_on_conversion** — due the first time a person is scored under the code carrying it, then never again for that person: the free-lead-gen → paid-conversion royalty, charged exactly once; person identity = caller-supplied external_id per key, exact-email fallback), amount, currency, **language** (nullable — a language-scoped term only fires when the scoring event's language matches, e.g. a translator fee on fr reports; null = all languages), active flag, effective_from/until. **One code has MANY royalty terms** — e.g. a base per-report fee to the content owner plus a separate revenue share to a distribution partner, evaluated independently and both recorded on the same usage event.
-- `usage_events`: api_key, access_code, code_type, scopes scored, assessment_id, timestamp, `fees_due` (list, one row per matching active royalty term at event time — computed from the code's terms at that moment; terms may change later without rewriting history).
+Every code usage logs a **Charge**: what the client owes for that usage (possibly $0), tied to the code's order type, product, and the caller's `external_order_id` (the client system's identifier for a customer's order, shared across that customer's code usages).
+
+**Royalty is due exactly once per order, structurally:** the first usage per (order, order_type) charges the code's configured amount; every repeat usage (updates/rescoring) logs a **$0 charge referencing the original** (`original_charge_id`) — the trail always shows why a usage cost nothing. Orders without an external_order_id dedup per assessment.
+
+**Lead → sale conversion is never stored.** Reporting infers it: an external_order_id with both a `lead` charge and a later `sale` charge is a converted lead. The lead's scope and the sale's scope need no relationship. One lead, at most one sale, per external_order_id. Cross-key/cross-order relationships are never treated as conversions.
+
+## Payouts (the stakeholder ledger)
+
+Each real (non-zero) charge splits into **Payouts** — money going out, always tied back to its charge, categorized:
+
+- **Category**: `royalty` | `fee` | `residual`
+- **Payout type**: `pro_d_royalty`, `derivative_royalty`, `tech_fee`, `language_fee`, `residual_margin`, …
+- **Status**: `accrued` → `paid` (or `void`) — supports payout-aging reports.
+
+A code's **payout schedule** (`payout_terms`) defines the split: per line — recipient (→ `payees` FK once prolog-opw.1 lands), category, payout type, kind (`flat` | `percent_of_charge`), amount, currency, optional **language** (a language-scoped line, e.g. a translator fee, only fires when the scoring event's language matches). Exactly one active **residual** line per code absorbs `charge − sum(other lines)` so the schedule always balances to the charge — all money is paid out to someone; when conditional lines don't fire, the residual grows. A negative residual is recorded as-is (visible misconfiguration, never hidden).
+
+Schedule lines are ended, never deleted; a line that has accrued a real payout locks against editing (end + re-add instead). $0 charges produce no payout rows.
+
+## Data model summary
+
+- `access_codes`: code (unguessable), name, order_type, **charge_amount/charge_currency**, product_code, allowed scopes, max_uses/expires_at, issued_to (→ client_id per opw.1), notes, active, created_by.
+- `payout_terms`: access_code_id, recipient (→ payee_id per opw.1), category, payout_type, kind, amount, currency, language, active, effective windows.
+- `charges`: usage_event_id, access_code, api_key, assessment, external_order_id, order_type, product_code, amount, currency, original_charge_id, timestamp.
+- `payouts`: charge_id, payout_term_id, recipient, category, payout_type, amount, currency, language, status, timestamp.
+- `usage_events` stays the raw access log; `fees_due` mirrors the payout lines as a snapshot. **Statements report from `charges` + `payouts`, never recomputed.**
 - Scoring request carries `access_code`; API enforces requested scopes ⊆ code's allowed scopes (403 with explanation otherwise). Keys may also have a default code.
 
 ## Billing (designed now, switched on later)
 
-Usage events are the metering layer. Decided 2026-07-11: billing runs through **Stripe**, collected via bank transfer, on a **monthly usage-metered** basis, with the client managing billing in their own account (self-service portal — Stripe-hosted vs. custom, and exact cadence/payment-method configuration still open, see 12-open-questions.md). Map `clients` → Stripe customers (via `stripe_customer_id`), roll up `fees_due` line items into metered usage (fee presence is terms-driven — events with empty fees_due simply owe nothing) / invoices (Laravel Cashier) — a code with multiple royalty terms produces multiple billable lines per event, addressed to their respective payees. Royalty statements (per client, per code type, per payee, per period) must be producible from `usage_events` alone — no Stripe dependency for reporting.
+Charges/payouts are the metering layer. Decided 2026-07-11: billing runs through **Stripe**, collected via bank transfer, on a **monthly usage-metered** basis, with the client managing billing in their own account (self-service portal — Stripe-hosted vs. custom still open, see 12-open-questions.md). Map `clients` → Stripe customers, roll up charges into metered usage/invoices (Laravel Cashier). Statements (per client, per order type, per payee, per code, per period) must be producible from the `charges`/`payouts` ledgers alone — no Stripe dependency for reporting.
 
 ## Control panel requirements
 
-Issue / bulk-generate / revoke codes; manage a code's royalty terms (add/end without deleting history); filter usage by code type or payee; royalty statement export (CSV/PDF) split by payee AND by code name; no-fee usage (codes without active terms) visible but contributes nothing to totals. Codes/keys are issued against a `client` record (typeahead/select), not free-typed.
+Issue / bulk-generate / revoke codes (list → dedicated issue page → per-code detail page); configure charge + payout schedule per code (add/edit-while-unused/end lines, one residual); statement reporting by order type, recipient, and code with CSV export; lead→sale conversion rate; $0 and repeat charges visible with their back-references. Locking: order_type/scopes freeze after first use; accrued payout lines freeze forever. Codes/keys issued against a `client` record once prolog-opw.1 lands.

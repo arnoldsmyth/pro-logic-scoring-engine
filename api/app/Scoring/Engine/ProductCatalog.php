@@ -28,7 +28,8 @@ class ProductCatalog
      *   insightScoreVersionKey: the legacy version bundle this code scores,
      *   toolVersions: api tool name => ToolVersionKey for this product,
      *   royalties: list of independent payable terms for this code (empty
-     *     list = no royalty due, e.g. a derivative-type code per docs/07),
+     *     list = no payout due; payout schedules live on access codes,
+     *     see charges-payouts-data-model.md),
      * }
      */
     public const PRODUCTS = [

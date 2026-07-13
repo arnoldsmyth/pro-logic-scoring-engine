@@ -15,20 +15,33 @@ export const TOOL_LABELS: Record<string, string> = {
   organization: 'Organization',
 }
 
-// Type is a descriptive label only (decided 2026-07-11) — royalty behavior
-// comes from a code's royalty_terms, not its type.
-export const CODE_TYPE_LABELS: Record<string, string> = {
+// Order type is a reporting dimension, never a gate
+// (charges-payouts-data-model.md): every usage logs a charge; training/
+// complimentary/lead simply resolve to $0 today.
+export const ORDER_TYPE_LABELS: Record<string, string> = {
   training: 'Training',
-  bizdev: 'Biz Dev',
-  derivative: 'Derivative',
+  complimentary: 'Complimentary',
+  lead: 'Lead',
+  sale: 'Sale',
+}
+
+export const PAYOUT_CATEGORY_LABELS: Record<string, string> = {
+  royalty: 'Royalty',
+  fee: 'Fee',
+  residual: 'Residual (balance catch-all)',
+}
+
+export const PAYOUT_TYPE_OPTIONS: Record<string, string> = {
+  pro_d_royalty: 'PRO-D royalty',
+  derivative_royalty: 'Derivative royalty',
+  tech_fee: 'Tech fee',
+  language_fee: 'Language fee',
+  residual_margin: 'Residual margin',
 }
 
 export const TERM_KIND_LABELS: Record<string, string> = {
-  flat_per_report: 'Flat per report',
-  percentage_of_price: 'Percentage of price',
-  tiered: 'Tiered',
-  subscription: 'Subscription',
-  flat_on_conversion: 'On conversion (once per person)',
+  flat: 'Flat amount',
+  percent_of_charge: '% of charge',
 }
 
 export const SCOPE_LABELS: Record<string, string> = {
@@ -45,5 +58,4 @@ export const SCOPE_LABELS: Record<string, string> = {
 }
 
 export const toolLabel = (raw: string) => TOOL_LABELS[raw] ?? raw
-export const codeTypeLabel = (raw: string) => CODE_TYPE_LABELS[raw] ?? raw
 export const scopeLabel = (raw: string) => SCOPE_LABELS[raw] ?? raw

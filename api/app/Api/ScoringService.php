@@ -99,16 +99,23 @@ class ScoringService
                 'scored_at' => $scoredAt,
             ]);
 
-            UsageEvent::create([
+            $event = UsageEvent::create([
                 'api_key_id' => $apiKey->id,
                 'access_code_id' => $code->id,
-                'code_type' => $code->type,
+                'code_type' => $code->order_type,
                 'product_code' => $product,
                 'assessment_id' => $assessment->id,
                 'scopes' => $scopes,
-                'fees_due' => $code->feesDueNow($language, $assessment),
+                'fees_due' => [],
                 'created_at' => $scoredAt,
             ]);
+
+            // Charges & payouts ledger (charges-payouts-data-model.md):
+            // every usage logs a charge; only the first real charge per
+            // order splits into payouts. fees_due mirrors the payout lines
+            // as a snapshot on the raw access log.
+            $charge = $code->recordCharge($event, $assessment, $language);
+            $event->update(['fees_due' => $charge->payouts()->get(['payout_term_id', 'recipient', 'category', 'payout_type', 'amount', 'currency', 'language'])->toArray()]);
 
             $code->increment('uses_count');
 

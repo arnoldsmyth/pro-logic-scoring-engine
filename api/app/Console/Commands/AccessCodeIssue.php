@@ -9,8 +9,10 @@ use Illuminate\Console\Command;
 
 class AccessCodeIssue extends Command
 {
-    protected $signature = 'code:issue {--name= : Human-readable display name for royalty reporting (required)}
-        {--type=training : training|bizdev|derivative — descriptive label only; royalty behavior comes from royalty_terms (docs/07)}
+    protected $signature = 'code:issue {--name= : Human-readable display name for reporting (required)}
+        {--order-type=training : training|complimentary|lead|sale — reporting dimension, never a gate (charges-payouts-data-model.md)}
+        {--charge=0 : Charge amount the client owes per order under this code}
+        {--currency=USD : Charge currency}
         {--product=VC18 : ProductCatalog entry this code scores}
         {--scopes=full : Comma-separated allowed scopes}
         {--max-uses= : Optional usage cap}
@@ -28,9 +30,9 @@ class AccessCodeIssue extends Command
             return self::FAILURE;
         }
 
-        $type = $this->option('type');
-        if (! in_array($type, ['training', 'bizdev', 'derivative'], true)) {
-            $this->error("type must be training, bizdev or derivative — got '{$type}'.");
+        $type = $this->option('order-type');
+        if (! in_array($type, ['training', 'complimentary', 'lead', 'sale'], true)) {
+            $this->error("order-type must be training, complimentary, lead or sale — got '{$type}'.");
 
             return self::FAILURE;
         }
@@ -52,7 +54,9 @@ class AccessCodeIssue extends Command
         $code = AccessCode::create([
             'code' => AccessCode::generateCode(),
             'name' => $this->option('name'),
-            'type' => $type,
+            'order_type' => $type,
+            'charge_amount' => (float) $this->option('charge'),
+            'charge_currency' => strtoupper($this->option('currency')),
             'product_code' => $this->option('product'),
             'allowed_scopes' => $scopes,
             'max_uses' => $this->option('max-uses') !== null ? (int) $this->option('max-uses') : null,
@@ -62,7 +66,7 @@ class AccessCodeIssue extends Command
             'created_by' => get_current_user(),
         ]);
 
-        $this->info("Access code #{$code->id} '{$code->name}' ({$code->type}, product {$code->product_code}) issued:");
+        $this->info("Access code #{$code->id} '{$code->name}' ({$code->order_type}, charge {$code->charge_amount} {$code->charge_currency}, product {$code->product_code}) issued:");
         $this->line("  {$code->code}");
         $this->line('  Allowed scopes: '.implode(', ', $scopes));
 

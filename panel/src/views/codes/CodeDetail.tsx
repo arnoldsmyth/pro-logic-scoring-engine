@@ -4,11 +4,19 @@ import { ArrowLeft } from 'lucide-react'
 import { ApiError, get, patch, post } from '../../api'
 import { useAuth } from '../../auth'
 import { Badge, Button, Card, Explainer, Field, inputClass } from '../../components/ui'
-import { CODE_TYPE_LABELS, SCOPE_LABELS, TERM_KIND_LABELS } from '../../labels'
-import type { CodeDetail as CodeDetailType } from './types'
+import { ORDER_TYPE_LABELS, PAYOUT_CATEGORY_LABELS, PAYOUT_TYPE_OPTIONS, SCOPE_LABELS, TERM_KIND_LABELS } from '../../labels'
+import type { CodeDetail as CodeDetailType, Term } from './types'
 
-const EMPTY_TERM = { recipient: '', kind: 'flat_per_report', amount: '', currency: 'USD', language: '' }
-const typeTone = { training: 'blue', bizdev: 'amber', derivative: 'gray' } as const
+const EMPTY_TERM = { recipient: '', category: 'royalty', payout_type: 'pro_d_royalty', kind: 'flat', amount: '', currency: 'USD', language: '' }
+const orderTypeTone = { training: 'blue', complimentary: 'gray', lead: 'amber', sale: 'green' } as const
+
+function describeTerm(t: Term): string {
+  const value = t.category === 'residual'
+    ? 'balance'
+    : t.kind === 'percent_of_charge' ? `${t.amount}% of charge` : `${t.amount} ${t.currency}`
+  const lang = t.language ? ` · ${t.language} only` : ''
+  return `${t.recipient} — ${PAYOUT_CATEGORY_LABELS[t.category] ?? t.category}${t.payout_type ? ` (${PAYOUT_TYPE_OPTIONS[t.payout_type] ?? t.payout_type})` : ''}, ${value}${lang}`
+}
 
 export default function CodeDetail() {
   const { code: codeParam } = useParams<{ code: string }>()
@@ -16,9 +24,9 @@ export default function CodeDetail() {
   const isAdmin = user?.role === 'admin'
 
   const [code, setCode] = useState<CodeDetailType | null>(null)
-  const [meta, setMeta] = useState({ name: '', issued_to: '', notes: '', max_uses: '', expires_at: '' });
+  const [meta, setMeta] = useState({ name: '', issued_to: '', notes: '', max_uses: '', expires_at: '', charge_amount: '0', charge_currency: 'USD' })
   const [scopes, setScopes] = useState<string[]>([])
-  const [type, setType] = useState('training')
+  const [orderType, setOrderType] = useState('training')
   const [termForm, setTermForm] = useState(EMPTY_TERM)
   const [editingTerm, setEditingTerm] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -34,9 +42,11 @@ export default function CodeDetail() {
           notes: c.notes ?? '',
           max_uses: c.max_uses?.toString() ?? '',
           expires_at: c.expires_at?.slice(0, 10) ?? '',
+          charge_amount: c.charge_amount,
+          charge_currency: c.charge_currency,
         })
         setScopes(c.allowed_scopes)
-        setType(c.type)
+        setOrderType(c.order_type)
       })
       .catch(() => setNotFound(true))
   }
@@ -67,38 +77,38 @@ export default function CodeDetail() {
       notes: meta.notes || null,
       max_uses: meta.max_uses ? Number(meta.max_uses) : null,
       expires_at: meta.expires_at || null,
+      charge_amount: Number(meta.charge_amount),
+      charge_currency: meta.charge_currency,
     }))
 
-  const saveScopesAndType = () => run(() => patch(`/codes/${codeParam}`, { type, allowed_scopes: scopes }))
+  const saveScopesAndType = () => run(() => patch(`/codes/${codeParam}`, { order_type: orderType, allowed_scopes: scopes }))
+
+  const termPayload = () => ({
+    recipient: termForm.recipient,
+    category: termForm.category,
+    payout_type: termForm.payout_type || null,
+    kind: termForm.kind,
+    amount: termForm.category === 'residual' ? 0 : Number(termForm.amount),
+    currency: termForm.currency,
+    language: termForm.language || null,
+  })
 
   const addTerm = () =>
     run(async () => {
-      await post(`/codes/${codeParam}/terms`, {
-        recipient: termForm.recipient,
-        kind: termForm.kind,
-        amount: Number(termForm.amount),
-        currency: termForm.currency,
-        language: termForm.language || null,
-      })
+      await post(`/codes/${codeParam}/terms`, termPayload())
       setTermForm(EMPTY_TERM)
     })
 
   const saveTermEdit = (termId: number) =>
     run(async () => {
-      await patch(`/terms/${termId}`, {
-        recipient: termForm.recipient,
-        kind: termForm.kind,
-        amount: Number(termForm.amount),
-        currency: termForm.currency,
-        language: termForm.language || null,
-      })
+      await patch(`/terms/${termId}`, termPayload())
       setEditingTerm(null)
       setTermForm(EMPTY_TERM)
     })
 
-  const startEditTerm = (t: CodeDetailType['royalty_terms'][number]) => {
+  const startEditTerm = (t: Term) => {
     setEditingTerm(t.id)
-    setTermForm({ recipient: t.recipient, kind: t.kind, amount: t.amount, currency: t.currency, language: t.language ?? '' })
+    setTermForm({ recipient: t.recipient, category: t.category, payout_type: t.payout_type ?? '', kind: t.kind, amount: t.amount, currency: t.currency, language: t.language ?? '' })
   }
 
   if (notFound) {
@@ -110,6 +120,15 @@ export default function CodeDetail() {
     )
   }
   if (!code) return <p className="text-sm text-gray-400">Loading…</p>
+
+  // Schedule preview: how the configured charge would split today (flat +
+  // percent lines that aren't language-scoped, residual takes the rest).
+  const activeTerms = code.payout_terms.filter((t) => t.active)
+  const chargeNum = Number(meta.charge_amount)
+  const allocated = activeTerms
+    .filter((t) => t.category !== 'residual')
+    .reduce((sum, t) => sum + (t.kind === 'percent_of_charge' ? (chargeNum * Number(t.amount)) / 100 : Number(t.amount)), 0)
+  const residualLine = activeTerms.find((t) => t.category === 'residual')
 
   return (
     <div className="space-y-4">
@@ -125,42 +144,43 @@ export default function CodeDetail() {
 
       {error && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
-      <Explainer title="what CRUD means here">
+      <Explainer title="charges, payouts, and what locks when">
         <p>
-          Revoke stops a code from scoring anything new but never deletes it — historical usage_events and
-          scored_results keep referencing it forever, exactly as recorded. There is no delete anywhere in this flow:
-          type and scopes freeze the moment a code is first used (changing them retroactively would misrepresent what
-          earlier calls were permitted to do), and a royalty term freezes the moment it produces its first fee
-          (editing it would rewrite an already-charged amount). The only path forward for either is end/revoke +
-          issue something new — the audit trail never gets rewritten.
+          Every usage of this code logs a charge: the first usage per order charges the configured amount and splits
+          it into payouts; repeats log $0 pointing at the original — royalty due once per order, structurally. Order
+          type and scopes freeze after first use; a payout line freezes once it has accrued a real payout (end it and
+          add a new line instead — history is never rewritten). Charge changes apply to future orders only; the
+          ledgers never change retroactively.
         </p>
       </Explainer>
 
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-lg font-semibold text-gray-900">{code.name ?? '(unnamed)'}</h1>
         <code className="text-xs text-gray-400">{code.code}</code>
-        <Badge tone={typeTone[code.type]}>{code.type}</Badge>
+        <Badge tone={orderTypeTone[code.order_type]}>{ORDER_TYPE_LABELS[code.order_type] ?? code.order_type}</Badge>
         {code.active ? <Badge tone="green">active</Badge> : <Badge tone="red">revoked</Badge>}
       </div>
 
-      <Card title="Metadata">
+      <Card title="Metadata & charge">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Name"><input className={inputClass} value={meta.name} onChange={(e) => setMeta({ ...meta, name: e.target.value })} /></Field>
           <Field label="Issued to"><input className={inputClass} value={meta.issued_to} onChange={(e) => setMeta({ ...meta, issued_to: e.target.value })} /></Field>
+          <Field label="Charge per order (future orders only)"><input className={inputClass} type="number" min="0" step="0.01" value={meta.charge_amount} onChange={(e) => setMeta({ ...meta, charge_amount: e.target.value })} /></Field>
+          <Field label="Charge currency"><input className={inputClass} maxLength={3} value={meta.charge_currency} onChange={(e) => setMeta({ ...meta, charge_currency: e.target.value.toUpperCase() })} /></Field>
           <Field label="Max uses (blank = unlimited)"><input className={inputClass} type="number" min="1" value={meta.max_uses} onChange={(e) => setMeta({ ...meta, max_uses: e.target.value })} /></Field>
           <Field label="Expires (blank = never)"><input className={inputClass} type="date" value={meta.expires_at} onChange={(e) => setMeta({ ...meta, expires_at: e.target.value })} /></Field>
           <div className="sm:col-span-2">
             <Field label="Notes"><textarea className={inputClass} rows={2} value={meta.notes} onChange={(e) => setMeta({ ...meta, notes: e.target.value })} /></Field>
           </div>
         </div>
-        {isAdmin && <Button onClick={saveMeta} kind="secondary">Save metadata</Button>}
+        {isAdmin && <Button onClick={saveMeta} kind="secondary">Save</Button>}
       </Card>
 
-      <Card title="Type and allowed scopes">
+      <Card title="Order type and allowed scopes">
         {code.scope_and_type_locked ? (
           <p className="mb-3 text-sm text-amber-700">
-            <Badge tone="amber">locked</Badge> This code has scored {code.uses_count} time{code.uses_count === 1 ? '' : 's'} — type and scopes
-            are frozen so historical usage stays accurate. Issue a new code instead of changing what this one is allowed to do.
+            <Badge tone="amber">locked</Badge> This code has scored {code.uses_count} time{code.uses_count === 1 ? '' : 's'} — order type and scopes
+            are frozen so historical usage and conversion reporting stay accurate. Issue a new code instead.
           </p>
         ) : (
           <p className="mb-3 text-xs text-gray-400">Never used yet — freely editable. Locks permanently after the first scoring call.</p>
@@ -183,9 +203,9 @@ export default function CodeDetail() {
           })}
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <Field label="Type">
-            <select className={inputClass} disabled={code.scope_and_type_locked || !isAdmin} value={type} onChange={(e) => setType(e.target.value)}>
-              {Object.entries(CODE_TYPE_LABELS).map(([value, label]) => (
+          <Field label="Order type">
+            <select className={inputClass} disabled={code.scope_and_type_locked || !isAdmin} value={orderType} onChange={(e) => setOrderType(e.target.value)}>
+              {Object.entries(ORDER_TYPE_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
               ))}
             </select>
@@ -194,14 +214,25 @@ export default function CodeDetail() {
         </div>
       </Card>
 
-      <Card title="Royalty terms">
+      <Card title="Payout schedule">
         <p className="mb-3 text-xs text-gray-400">
-          Terms are ended, never deleted — history stays intact. A term that has already produced a fee locks against
-          editing (end it and add a new one instead); an unused term can be corrected freely.
+          How each real charge splits among stakeholders. Lines are ended, never deleted. The residual line absorbs
+          the balance so the schedule always sums to the charge; language-scoped lines only fire on matching-language
+          orders (the residual grows when they don't fire).
         </p>
-        {code.royalty_terms.length === 0 && <p className="mb-3 text-sm text-gray-400">No terms — this code currently owes nothing when used.</p>}
+
+        {chargeNum > 0 && activeTerms.length > 0 && (
+          <div className="mb-4 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
+            Preview on a {chargeNum.toFixed(2)} {meta.charge_currency} charge (if every line fires):
+            itemized {allocated.toFixed(2)} · {residualLine
+              ? `residual to ${residualLine.recipient}: ${(chargeNum - allocated).toFixed(2)}`
+              : <span className="font-medium text-amber-700">no residual line — {(chargeNum - allocated).toFixed(2)} unallocated</span>}
+          </div>
+        )}
+
+        {code.payout_terms.length === 0 && <p className="mb-3 text-sm text-gray-400">No payout lines — real charges under this code would pay out nothing.</p>}
         <ul className="mb-4 space-y-2">
-          {code.royalty_terms.map((t) => (
+          {code.payout_terms.map((t) => (
             <li key={t.id} className="rounded-lg border border-gray-100 p-3 text-sm">
               {editingTerm === t.id ? (
                 <div className="flex flex-wrap items-end gap-2">
@@ -213,15 +244,14 @@ export default function CodeDetail() {
               ) : (
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-gray-700">
-                    {t.recipient} — {TERM_KIND_LABELS[t.kind] ?? t.kind}, {t.amount} {t.currency}
-                    {t.language ? ` · ${t.language} only` : ' · all languages'}
-                    {t.locked && <span className="ml-2"><Badge tone="gray">charged</Badge></span>}
+                    {describeTerm(t)}
+                    {t.locked && <span className="ml-2"><Badge tone="gray">accrued</Badge></span>}
                     {!t.active && <span className="ml-2"><Badge tone="gray">ended</Badge></span>}
                   </span>
                   {isAdmin && t.active && (
                     <span className="flex gap-2">
                       {!t.locked && <Button kind="secondary" onClick={() => startEditTerm(t)}>Edit</Button>}
-                      <Button kind="secondary" onClick={() => run(() => post(`/terms/${t.id}/end`))}>End term</Button>
+                      <Button kind="secondary" onClick={() => run(() => post(`/terms/${t.id}/end`))}>End line</Button>
                     </span>
                   )}
                 </div>
@@ -232,17 +262,38 @@ export default function CodeDetail() {
 
         {isAdmin && (
           <>
-            <h3 className="mb-2 text-xs font-semibold uppercase text-gray-400">Add a term</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase text-gray-400">Add a line</h3>
             <div className="flex flex-wrap items-end gap-3">
               <Field label="Recipient"><input className={inputClass} value={termForm.recipient} onChange={(e) => setTermForm({ ...termForm, recipient: e.target.value })} /></Field>
-              <Field label="Kind">
-                <select className={inputClass} value={termForm.kind} onChange={(e) => setTermForm({ ...termForm, kind: e.target.value })}>
-                  {Object.entries(TERM_KIND_LABELS).map(([value, label]) => (
+              <Field label="Category">
+                <select className={inputClass} value={termForm.category} onChange={(e) => setTermForm({ ...termForm, category: e.target.value, payout_type: e.target.value === 'residual' ? 'residual_margin' : termForm.payout_type })}>
+                  {Object.entries(PAYOUT_CATEGORY_LABELS).map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
               </Field>
-              <Field label="Amount"><input className={inputClass} type="number" min="0" step="0.01" value={termForm.amount} onChange={(e) => setTermForm({ ...termForm, amount: e.target.value })} /></Field>
+              <Field label="Payout type">
+                <select className={inputClass} value={termForm.payout_type} onChange={(e) => setTermForm({ ...termForm, payout_type: e.target.value })}>
+                  <option value="">—</option>
+                  {Object.entries(PAYOUT_TYPE_OPTIONS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </Field>
+              {termForm.category !== 'residual' && (
+                <>
+                  <Field label="Kind">
+                    <select className={inputClass} value={termForm.kind} onChange={(e) => setTermForm({ ...termForm, kind: e.target.value })}>
+                      {Object.entries(TERM_KIND_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label={termForm.kind === 'percent_of_charge' ? '% of charge' : 'Amount'}>
+                    <input className={inputClass} type="number" min="0" step="0.01" value={termForm.amount} onChange={(e) => setTermForm({ ...termForm, amount: e.target.value })} />
+                  </Field>
+                </>
+              )}
               <Field label="Currency"><input className={`${inputClass} w-20`} maxLength={3} value={termForm.currency} onChange={(e) => setTermForm({ ...termForm, currency: e.target.value.toUpperCase() })} /></Field>
               <Field label="Language">
                 <select className={inputClass} value={termForm.language} onChange={(e) => setTermForm({ ...termForm, language: e.target.value })}>
@@ -252,19 +303,25 @@ export default function CodeDetail() {
                   <option value="pt">Portuguese only</option>
                 </select>
               </Field>
-              <Button onClick={addTerm} disabled={termForm.recipient.trim() === '' || termForm.amount === ''}>Add term</Button>
+              <Button onClick={addTerm} disabled={termForm.recipient.trim() === '' || (termForm.category !== 'residual' && termForm.amount === '')}>
+                Add line
+              </Button>
             </div>
           </>
         )}
       </Card>
 
-      <Card title="Recent usage">
-        {code.recent_usage.length === 0 && <p className="text-sm text-gray-400">Never used yet.</p>}
+      <Card title="Recent charges">
+        {code.recent_charges.length === 0 && <p className="text-sm text-gray-400">Never used yet.</p>}
         <ul className="space-y-1 text-sm">
-          {code.recent_usage.map((u) => (
-            <li key={u.id} className="flex justify-between border-b border-gray-50 py-1">
-              <span className="text-gray-700">{u.scopes.join(', ')}</span>
-              <span className="text-xs text-gray-400">{u.fee_count} fee{u.fee_count === 1 ? '' : 's'} · {u.created_at.slice(0, 16).replace('T', ' ')}</span>
+          {code.recent_charges.map((c) => (
+            <li key={c.id} className="flex flex-wrap justify-between gap-2 border-b border-gray-50 py-1">
+              <span className="text-gray-700">
+                {Number(c.amount) > 0 ? `${c.amount} ${c.currency}` : '$0'}
+                {c.is_repeat && <Badge tone="gray">repeat</Badge>}
+                {c.external_order_id && <code className="ml-2 text-xs text-gray-400">{c.external_order_id}</code>}
+              </span>
+              <span className="text-xs text-gray-400">{c.payout_count} payout{c.payout_count === 1 ? '' : 's'} · {c.created_at.slice(0, 16).replace('T', ' ')}</span>
             </li>
           ))}
         </ul>

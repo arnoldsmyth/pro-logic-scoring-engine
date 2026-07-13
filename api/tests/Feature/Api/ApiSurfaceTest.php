@@ -162,7 +162,7 @@ class ApiSurfaceTest extends TestCase
         $assessment = $this->makeAssessment();
         $code = AccessCode::create([
             'code' => AccessCode::generateCode(),
-            'type' => 'training',
+            'order_type' => 'training',
             'product_code' => 'VC18',
             'allowed_scopes' => ['pro.role'],
         ]);
@@ -179,7 +179,7 @@ class ApiSurfaceTest extends TestCase
         $assessment = $this->makeAssessment();
         $code = AccessCode::create([
             'code' => AccessCode::generateCode(),
-            'type' => 'training',
+            'order_type' => 'training',
             'product_code' => 'VC18',
             'allowed_scopes' => ['full'],
         ]);
@@ -200,7 +200,7 @@ class ApiSurfaceTest extends TestCase
         $assessment = $this->makeAssessment();
         $code = AccessCode::create([
             'code' => AccessCode::generateCode(),
-            'type' => 'training',
+            'order_type' => 'training',
             'product_code' => 'VC18',
             'allowed_scopes' => ['full'],
             'max_uses' => 1,
@@ -230,7 +230,7 @@ class ApiSurfaceTest extends TestCase
 
         $code = AccessCode::create([
             'code' => AccessCode::generateCode(),
-            'type' => 'training',
+            'order_type' => 'training',
             'product_code' => 'VC18',
             'allowed_scopes' => ['full'],
         ]);

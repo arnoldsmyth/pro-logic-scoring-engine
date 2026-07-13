@@ -6,7 +6,7 @@ import { Bars, Card, Explainer, StatCard } from '../components/ui'
 type Stats = {
   scoring_calls_by_day: Record<string, number>
   scores_by_scope: Record<string, number>
-  scores_by_code_type: Record<string, number>
+  scores_by_order_type: Record<string, number>
   totals: { assessments: number; scored_results: number; usage_events: number; webhook_failures: number }
 }
 
@@ -52,9 +52,9 @@ export default function Dashboard() {
             ))}
           </ul>
         </Card>
-        <Card title="Scores by code type">
+        <Card title="Scores by order type">
           <ul className="space-y-1 text-sm">
-            {Object.entries(stats.scores_by_code_type).map(([type, n]) => (
+            {Object.entries(stats.scores_by_order_type).map(([type, n]) => (
               <li key={type} className="flex justify-between">
                 <span className="text-gray-700">{type}</span>
                 <span className="text-gray-500">{n}</span>

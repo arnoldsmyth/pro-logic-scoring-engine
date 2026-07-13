@@ -1,6 +1,8 @@
 export type Term = {
   id: number
   recipient: string
+  category: 'royalty' | 'fee' | 'residual'
+  payout_type: string | null
   kind: string
   amount: string
   currency: string
@@ -12,7 +14,9 @@ export type Term = {
 export type CodeSummary = {
   code: string
   name: string | null
-  type: 'training' | 'bizdev' | 'derivative'
+  order_type: 'training' | 'complimentary' | 'lead' | 'sale'
+  charge_amount: string
+  charge_currency: string
   product_code: string
   allowed_scopes: string[]
   max_uses: number | null
@@ -23,11 +27,19 @@ export type CodeSummary = {
   active: boolean
   usage_events: number
   scope_and_type_locked: boolean
-  royalty_terms_count: number
-  active_royalty_terms_count: number
+  payout_terms_count: number
+  active_payout_terms_count: number
 }
 
 export type CodeDetail = CodeSummary & {
-  royalty_terms: Term[]
-  recent_usage: { id: number; scopes: string[]; fee_count: number; created_at: string }[]
+  payout_terms: Term[]
+  recent_charges: {
+    id: number
+    external_order_id: string | null
+    amount: string
+    currency: string
+    is_repeat: boolean
+    payout_count: number
+    created_at: string
+  }[]
 }
