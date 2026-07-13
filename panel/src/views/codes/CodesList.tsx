@@ -106,7 +106,7 @@ export default function CodesList() {
         ) : undefined}
       >
         <div className="mb-4 flex flex-wrap items-end gap-3">
-          <Field label="Search name, code, or issued-to">
+          <Field label="Search name, code, or client">
             <input className={`${inputClass} sm:w-72`} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} />
           </Field>
           <Field label="Status">

@@ -1,12 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ApiError, post } from '../../api'
+import { ApiError, get, post } from '../../api'
 import { Button, Card, Explainer, Field, inputClass } from '../../components/ui'
 import { ORDER_TYPE_LABELS, SCOPE_LABELS } from '../../labels'
 
 export default function CodeNew() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({ name: '', order_type: 'training', charge_amount: '0', charge_currency: 'USD', issued_to: '', count: '1' })
+  const [form, setForm] = useState({ name: '', order_type: 'training', charge_amount: '0', charge_currency: 'USD', client_id: '', count: '1' })
+  const [clients, setClients] = useState<{ id: number; name: string; active: boolean }[]>([])
+  useEffect(() => {
+    get<{ clients: { id: number; name: string; active: boolean }[] }>('/clients').then((r) => setClients(r.clients))
+  }, [])
   const [scopes, setScopes] = useState<string[]>(['full'])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -32,7 +36,7 @@ export default function CodeNew() {
         charge_currency: form.charge_currency,
         product_code: 'VC18',
         allowed_scopes: scopes,
-        issued_to: form.issued_to || null,
+        client_id: form.client_id ? Number(form.client_id) : null,
         count: Number(form.count),
       })
       navigate(r.codes.length === 1 ? `/codes/${r.codes[0]}` : '/codes')
@@ -99,8 +103,13 @@ export default function CodeNew() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Issued to">
-              <input className={inputClass} value={form.issued_to} onChange={(e) => setForm({ ...form, issued_to: e.target.value })} />
+            <Field label="Client">
+              <select className={inputClass} value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}>
+                <option value="">— none —</option>
+                {clients.filter((c) => c.active).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
             </Field>
             <Field label="Count">
               <input className={inputClass} type="number" min="1" max="500" value={form.count} onChange={(e) => setForm({ ...form, count: e.target.value })} />

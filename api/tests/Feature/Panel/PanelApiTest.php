@@ -6,6 +6,7 @@ use App\Models\AccessCode;
 use App\Models\ApiKey;
 use App\Models\Assessment;
 use App\Models\NormSet;
+use App\Models\Payee;
 use App\Models\PayoutTerm;
 use App\Models\UsageEvent;
 use App\Models\User;
@@ -95,8 +96,11 @@ class PanelApiTest extends TestCase
         $this->assertCount(3, $codes);
         $codeStr = $codes[0];
 
+        $owner = Payee::create(['name' => 'content-owner']);
+        $us = Payee::create(['name' => 'us']);
+
         $termId = $this->postJson("/panel/api/codes/{$codeStr}/terms", [
-            'recipient' => 'content-owner',
+            'payee_id' => $owner->id,
             'category' => 'royalty',
             'payout_type' => 'pro_d_royalty',
             'kind' => 'flat',
@@ -105,12 +109,12 @@ class PanelApiTest extends TestCase
 
         // Exactly one active residual line allowed.
         $this->postJson("/panel/api/codes/{$codeStr}/terms", [
-            'recipient' => 'us',
+            'payee_id' => $us->id,
             'category' => 'residual',
             'payout_type' => 'residual_margin',
         ])->assertStatus(201);
         $this->postJson("/panel/api/codes/{$codeStr}/terms", [
-            'recipient' => 'us-again',
+            'payee_id' => $owner->id,
             'category' => 'residual',
         ])->assertStatus(422)->assertJsonPath('error.code', 'residual_exists');
 
@@ -158,7 +162,8 @@ class PanelApiTest extends TestCase
         $this->actingAs($this->admin());
         $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
         $code = AccessCode::create(['code' => 'ac_termlock', 'name' => 'Line lock test', 'order_type' => 'sale', 'charge_amount' => 50, 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
-        $term = $code->payoutTerms()->create(['recipient' => 'owner', 'category' => 'royalty', 'payout_type' => 'pro_d_royalty', 'kind' => 'flat', 'amount' => 10, 'currency' => 'USD']);
+        $owner = Payee::create(['name' => 'owner']);
+        $term = $code->payoutTerms()->create(['payee_id' => $owner->id, 'category' => 'royalty', 'payout_type' => 'pro_d_royalty', 'kind' => 'flat', 'amount' => 10, 'currency' => 'USD']);
 
         // Simulate a real charge having split into this line.
         $assessment = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en']);
@@ -172,7 +177,7 @@ class PanelApiTest extends TestCase
 
         // End-and-replace is still the correct path forward.
         $this->postJson("/panel/api/terms/{$term->id}/end")->assertOk();
-        $newTermId = $this->postJson('/panel/api/codes/ac_termlock/terms', ['recipient' => 'owner', 'category' => 'royalty', 'kind' => 'flat', 'amount' => 999])
+        $newTermId = $this->postJson('/panel/api/codes/ac_termlock/terms', ['payee_id' => $owner->id, 'category' => 'royalty', 'kind' => 'flat', 'amount' => 999])
             ->assertStatus(201)->json('id');
         $this->assertNotSame($term->id, $newTermId);
     }
@@ -181,9 +186,10 @@ class PanelApiTest extends TestCase
     {
         $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
         $sale = AccessCode::create(['code' => 'ac_sale', 'name' => 'Sale code', 'order_type' => 'sale', 'charge_amount' => 100, 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
-        $sale->payoutTerms()->create(['recipient' => 'owner', 'category' => 'royalty', 'payout_type' => 'pro_d_royalty', 'kind' => 'percent_of_charge', 'amount' => 20, 'currency' => 'USD']);
-        $sale->payoutTerms()->create(['recipient' => 'fr-translator', 'category' => 'fee', 'payout_type' => 'language_fee', 'kind' => 'flat', 'amount' => 5, 'currency' => 'USD', 'language' => 'fr']);
-        $sale->payoutTerms()->create(['recipient' => 'us', 'category' => 'residual', 'payout_type' => 'residual_margin', 'kind' => 'flat', 'amount' => 0, 'currency' => 'USD']);
+        [$owner, $translator, $us] = [Payee::create(['name' => 'owner']), Payee::create(['name' => 'fr-translator']), Payee::create(['name' => 'us'])];
+        $sale->payoutTerms()->create(['payee_id' => $owner->id, 'category' => 'royalty', 'payout_type' => 'pro_d_royalty', 'kind' => 'percent_of_charge', 'amount' => 20, 'currency' => 'USD']);
+        $sale->payoutTerms()->create(['payee_id' => $translator->id, 'category' => 'fee', 'payout_type' => 'language_fee', 'kind' => 'flat', 'amount' => 5, 'currency' => 'USD', 'language' => 'fr']);
+        $sale->payoutTerms()->create(['payee_id' => $us->id, 'category' => 'residual', 'payout_type' => 'residual_margin', 'kind' => 'flat', 'amount' => 0, 'currency' => 'USD']);
 
         $mkEvent = function ($assessment) use ($key, $sale) {
             return UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $sale->id, 'code_type' => 'sale', 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['mcs'], 'fees_due' => [], 'created_at' => now()]);
@@ -222,8 +228,8 @@ class PanelApiTest extends TestCase
         $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
         $lead = AccessCode::create(['code' => 'ac_lead', 'name' => 'Lead taster', 'order_type' => 'lead', 'charge_amount' => 0, 'product_code' => 'VC18', 'allowed_scopes' => ['mcs.m']]);
         $sale = AccessCode::create(['code' => 'ac_sale2', 'name' => 'Full product sale', 'order_type' => 'sale', 'charge_amount' => 100, 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
-        $sale->payoutTerms()->create(['recipient' => 'owner', 'category' => 'royalty', 'payout_type' => 'pro_d_royalty', 'kind' => 'flat', 'amount' => 30, 'currency' => 'USD']);
-        $sale->payoutTerms()->create(['recipient' => 'us', 'category' => 'residual', 'payout_type' => 'residual_margin', 'kind' => 'flat', 'amount' => 0, 'currency' => 'USD']);
+        $sale->payoutTerms()->create(['payee_id' => Payee::create(['name' => 'owner'])->id, 'category' => 'royalty', 'payout_type' => 'pro_d_royalty', 'kind' => 'flat', 'amount' => 30, 'currency' => 'USD']);
+        $sale->payoutTerms()->create(['payee_id' => Payee::create(['name' => 'us'])->id, 'category' => 'residual', 'payout_type' => 'residual_margin', 'kind' => 'flat', 'amount' => 0, 'currency' => 'USD']);
 
         $mkEvent = function ($assessment, $code) use ($key) {
             return UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $code->id, 'code_type' => $code->order_type, 'product_code' => 'VC18', 'assessment_id' => $assessment->id, 'scopes' => ['mcs'], 'fees_due' => [], 'created_at' => now()]);
@@ -253,6 +259,46 @@ class PanelApiTest extends TestCase
         $this->assertStringContainsString('Full product sale', $csv);
         $this->assertStringContainsString('residual_margin', $csv);
         $this->assertStringContainsString('order-11', $csv);
+    }
+
+    public function test_clients_and_payees_crud(): void
+    {
+        $this->actingAs($this->admin());
+
+        $clientId = $this->postJson('/panel/api/clients', ['name' => 'Acme Corp', 'billing_email' => 'ap@acme.com'])
+            ->assertStatus(201)->json('id');
+        // Duplicate names refused.
+        $this->postJson('/panel/api/clients', ['name' => 'Acme Corp'])->assertStatus(422);
+
+        // A payee optionally linked to the same-party client record.
+        $payeeId = $this->postJson('/panel/api/payees', ['name' => 'Acme Royalties', 'client_id' => $clientId])
+            ->assertStatus(201)->json('id');
+
+        $this->patchJson("/panel/api/clients/{$clientId}", ['active' => false])->assertOk();
+        $this->patchJson("/panel/api/payees/{$payeeId}", ['name' => 'Acme Royalties Ltd'])->assertOk();
+
+        $clients = $this->getJson('/panel/api/clients')->assertOk()->json('clients');
+        $this->assertFalse(collect($clients)->firstWhere('id', $clientId)['active']);
+        $payees = $this->getJson('/panel/api/payees')->assertOk()->json('payees');
+        $found = collect($payees)->firstWhere('id', $payeeId);
+        $this->assertSame('Acme Royalties Ltd', $found['name']);
+        $this->assertSame('Acme Corp', $found['client']);
+
+        // Keys and codes attach to clients.
+        $keyId = $this->postJson('/panel/api/keys', ['name' => 'acme-live', 'client_id' => $clientId])->assertStatus(201)->json('id');
+        $keys = $this->getJson('/panel/api/keys')->assertOk()->json('keys');
+        $this->assertSame('Acme Corp', collect($keys)->firstWhere('id', $keyId)['client']);
+
+        $codes = $this->postJson('/panel/api/codes', [
+            'name' => 'Acme sale', 'order_type' => 'sale', 'charge_amount' => 50,
+            'product_code' => 'VC18', 'allowed_scopes' => ['full'], 'client_id' => $clientId,
+        ])->assertStatus(201)->json('codes');
+        $this->getJson("/panel/api/codes/{$codes[0]}")->assertOk()->assertJsonPath('client', 'Acme Corp');
+
+        // Viewers read, cannot mutate.
+        $this->actingAs($this->viewer());
+        $this->getJson('/panel/api/payees')->assertOk();
+        $this->postJson('/panel/api/clients', ['name' => 'Nope Inc'])->assertStatus(403);
     }
 
     public function test_person_timeline_links_same_person_assessments(): void

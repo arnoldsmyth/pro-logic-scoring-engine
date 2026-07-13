@@ -14,9 +14,11 @@ class KeysController extends Controller
     public function index(): JsonResponse
     {
         return response()->json([
-            'keys' => ApiKey::query()->withCount('usageEvents')->orderBy('id')->get()->map(fn (ApiKey $k) => [
+            'keys' => ApiKey::query()->with('client:id,name')->withCount('usageEvents')->orderBy('id')->get()->map(fn (ApiKey $k) => [
                 'id' => $k->id,
                 'name' => $k->name,
+                'client' => $k->client?->name,
+                'client_id' => $k->client_id,
                 'key_prefix' => $k->key_prefix.'…',
                 'rate_limit_per_minute' => $k->rate_limit_per_minute,
                 'default_access_code' => $k->defaultAccessCode?->code,
@@ -34,6 +36,7 @@ class KeysController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'client_id' => ['nullable', 'exists:clients,id'],
             'rate_limit_per_minute' => ['integer', 'min:1', 'max:10000'],
             'default_access_code' => ['nullable', 'string'],
             'webhook_url' => ['nullable', 'url'],
@@ -44,6 +47,7 @@ class KeysController extends Controller
         $key = ApiKey::create([
             ...$attributes,
             'name' => $data['name'],
+            'client_id' => $data['client_id'] ?? null,
             'rate_limit_per_minute' => $data['rate_limit_per_minute'] ?? 60,
             'default_access_code_id' => $this->codeId($data['default_access_code'] ?? null),
             'webhook_url' => $data['webhook_url'] ?? null,
@@ -57,6 +61,7 @@ class KeysController extends Controller
     {
         $data = $request->validate([
             'name' => ['string', 'max:255'],
+            'client_id' => ['nullable', 'exists:clients,id'],
             'rate_limit_per_minute' => ['integer', 'min:1', 'max:10000'],
             'default_access_code' => ['nullable', 'string'],
             'webhook_url' => ['nullable', 'url'],

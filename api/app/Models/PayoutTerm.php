@@ -32,6 +32,11 @@ class PayoutTerm extends Model
         return $this->belongsTo(AccessCode::class);
     }
 
+    public function payee(): BelongsTo
+    {
+        return $this->belongsTo(Payee::class);
+    }
+
     public function payouts(): HasMany
     {
         return $this->hasMany(Payout::class);

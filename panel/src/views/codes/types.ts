@@ -1,5 +1,6 @@
 export type Term = {
   id: number
+  payee_id: number | null
   recipient: string
   category: 'royalty' | 'fee' | 'residual'
   payout_type: string | null
@@ -22,7 +23,8 @@ export type CodeSummary = {
   max_uses: number | null
   uses_count: number
   expires_at: string | null
-  issued_to: string | null
+  client: string | null
+  client_id: number | null
   notes: string | null
   active: boolean
   usage_events: number

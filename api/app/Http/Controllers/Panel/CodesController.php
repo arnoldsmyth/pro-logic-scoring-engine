@@ -33,11 +33,12 @@ class CodesController extends Controller
     {
         return response()->json([
             'codes' => AccessCode::query()
+                ->with('client:id,name')
                 ->withCount('usageEvents')
                 ->when($request->query('q'), fn ($q, $term) => $q->where(fn ($w) => $w
                     ->where('name', 'like', "%{$term}%")
                     ->orWhere('code', 'like', "%{$term}%")
-                    ->orWhere('issued_to', 'like', "%{$term}%")))
+                    ->orWhereHas('client', fn ($c) => $c->where('name', 'like', "%{$term}%"))))
                 ->when($request->query('order_type'), fn ($q, $t) => $q->where('order_type', $t))
                 ->when($request->query('status') === 'active', fn ($q) => $q->where('active', true))
                 ->when($request->query('status') === 'revoked', fn ($q) => $q->where('active', false))
@@ -51,7 +52,7 @@ class CodesController extends Controller
     /** Full detail for the per-code manage page: metadata, payout schedule, usage summary. */
     public function show(AccessCode $code): JsonResponse
     {
-        $code->load('payoutTerms');
+        $code->load('payoutTerms.payee', 'client');
         $recentCharges = $code->charges()->with('payouts')->latest('created_at')->limit(10)->get();
 
         return response()->json([
@@ -80,7 +81,7 @@ class CodesController extends Controller
             'allowed_scopes' => ['required', 'array', 'min:1'],
             'max_uses' => ['nullable', 'integer', 'min:1'],
             'expires_at' => ['nullable', 'date'],
-            'issued_to' => ['nullable', 'string', 'max:255'],
+            'client_id' => ['nullable', 'exists:clients,id'],
             'notes' => ['nullable', 'string'],
             'count' => ['integer', 'min:1', 'max:500'], // bulk generation
         ]);
@@ -105,7 +106,7 @@ class CodesController extends Controller
                 'allowed_scopes' => $data['allowed_scopes'],
                 'max_uses' => $data['max_uses'] ?? null,
                 'expires_at' => $data['expires_at'] ?? null,
-                'issued_to' => $data['issued_to'] ?? null,
+                'client_id' => $data['client_id'] ?? null,
                 'notes' => $data['notes'] ?? null,
                 'created_by' => $request->user()->email,
             ])->code;
@@ -121,7 +122,7 @@ class CodesController extends Controller
             'active' => ['boolean'],
             'max_uses' => ['nullable', 'integer', 'min:1'],
             'expires_at' => ['nullable', 'date'],
-            'issued_to' => ['nullable', 'string', 'max:255'],
+            'client_id' => ['nullable', 'exists:clients,id'],
             'notes' => ['nullable', 'string'],
             'order_type' => [self::ORDER_TYPES],
             'allowed_scopes' => ['array', 'min:1'],
@@ -151,7 +152,7 @@ class CodesController extends Controller
     public function addTerm(Request $request, AccessCode $code): JsonResponse
     {
         $data = $request->validate([
-            'recipient' => ['required', 'string', 'max:255'],
+            'payee_id' => ['required', 'exists:payees,id'],
             'category' => ['required', self::PAYOUT_CATEGORIES],
             'payout_type' => ['nullable', 'string', 'max:32'],
             'kind' => ['required_unless:category,residual', self::PAYOUT_KINDS],
@@ -191,7 +192,7 @@ class CodesController extends Controller
         }
 
         $data = $request->validate([
-            'recipient' => ['string', 'max:255'],
+            'payee_id' => ['exists:payees,id'],
             'category' => [self::PAYOUT_CATEGORIES],
             'payout_type' => ['nullable', 'string', 'max:32'],
             'kind' => [self::PAYOUT_KINDS],
@@ -326,7 +327,8 @@ class CodesController extends Controller
             'max_uses' => $c->max_uses,
             'uses_count' => $c->uses_count,
             'expires_at' => $c->expires_at?->toIso8601String(),
-            'issued_to' => $c->issued_to,
+            'client_id' => $c->client_id,
+            'client' => $c->relationLoaded('client') ? $c->client?->name : $c->client()->value('name'),
             'notes' => $c->notes,
             'active' => $c->active,
             'usage_events' => $c->usage_events_count ?? $c->usageEvents()->count(),
@@ -341,7 +343,8 @@ class CodesController extends Controller
     {
         return [
             'id' => $t->id,
-            'recipient' => $t->recipient,
+            'payee_id' => $t->payee_id,
+            'recipient' => $t->relationLoaded('payee') ? ($t->payee?->name ?? '(unknown)') : ($t->payee()->value('name') ?? '(unknown)'),
             'category' => $t->category,
             'payout_type' => $t->payout_type,
             'kind' => $t->kind,

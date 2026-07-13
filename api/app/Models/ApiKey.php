@@ -19,6 +19,11 @@ class ApiKey extends Model
         ];
     }
 
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
+    }
+
     public function defaultAccessCode(): BelongsTo
     {
         return $this->belongsTo(AccessCode::class, 'default_access_code_id');

@@ -37,8 +37,8 @@ Schedule lines are ended, never deleted; a line that has accrued a real payout l
 
 ## Data model summary
 
-- `access_codes`: code (unguessable), name, order_type, **charge_amount/charge_currency**, product_code, allowed scopes, max_uses/expires_at, issued_to (→ client_id per opw.1), notes, active, created_by.
-- `payout_terms`: access_code_id, recipient (→ payee_id per opw.1), category, payout_type, kind, amount, currency, language, active, effective windows.
+- `access_codes`: code (unguessable), name, order_type, **charge_amount/charge_currency**, product_code, allowed scopes, max_uses/expires_at, client_id (FK to `clients`), notes, active, created_by.
+- `payout_terms`: access_code_id, payee_id (FK to `payees`; the payouts ledger snapshots the payee's name at charge time), category, payout_type, kind, amount, currency, language, active, effective windows.
 - `charges`: usage_event_id, access_code, api_key, assessment, external_order_id, order_type, product_code, amount, currency, original_charge_id, timestamp.
 - `payouts`: charge_id, payout_term_id, recipient, category, payout_type, amount, currency, language, status, timestamp.
 - `usage_events` stays the raw access log; `fees_due` mirrors the payout lines as a snapshot. **Statements report from `charges` + `payouts`, never recomputed.**
@@ -50,4 +50,4 @@ Charges/payouts are the metering layer. Decided 2026-07-11: billing runs through
 
 ## Control panel requirements
 
-Issue / bulk-generate / revoke codes (list → dedicated issue page → per-code detail page); configure charge + payout schedule per code (add/edit-while-unused/end lines, one residual); statement reporting by order type, recipient, and code with CSV export; lead→sale conversion rate; $0 and repeat charges visible with their back-references. Locking: order_type/scopes freeze after first use; accrued payout lines freeze forever. Codes/keys issued against a `client` record once prolog-opw.1 lands.
+Issue / bulk-generate / revoke codes (list → dedicated issue page → per-code detail page); configure charge + payout schedule per code (add/edit-while-unused/end lines, one residual); statement reporting by order type, recipient, and code with CSV export; lead→sale conversion rate; $0 and repeat charges visible with their back-references. Locking: order_type/scopes freeze after first use; accrued payout lines freeze forever. Codes/keys are issued against a `client` record; payout lines against a `payee` record (quick-add inline). Clients and payees are deactivated, never deleted.

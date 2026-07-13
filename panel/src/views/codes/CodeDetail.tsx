@@ -7,7 +7,7 @@ import { Badge, Button, Card, Explainer, Field, inputClass } from '../../compone
 import { ORDER_TYPE_LABELS, PAYOUT_CATEGORY_LABELS, PAYOUT_TYPE_OPTIONS, SCOPE_LABELS, TERM_KIND_LABELS } from '../../labels'
 import type { CodeDetail as CodeDetailType, Term } from './types'
 
-const EMPTY_TERM = { recipient: '', category: 'royalty', payout_type: 'pro_d_royalty', kind: 'flat', amount: '', currency: 'USD', language: '' }
+const EMPTY_TERM = { payee_id: '', category: 'royalty', payout_type: 'pro_d_royalty', kind: 'flat', amount: '', currency: 'USD', language: '' }
 const orderTypeTone = { training: 'blue', complimentary: 'gray', lead: 'amber', sale: 'green' } as const
 
 function describeTerm(t: Term): string {
@@ -24,7 +24,10 @@ export default function CodeDetail() {
   const isAdmin = user?.role === 'admin'
 
   const [code, setCode] = useState<CodeDetailType | null>(null)
-  const [meta, setMeta] = useState({ name: '', issued_to: '', notes: '', max_uses: '', expires_at: '', charge_amount: '0', charge_currency: 'USD' })
+  const [meta, setMeta] = useState({ name: '', client_id: '', notes: '', max_uses: '', expires_at: '', charge_amount: '0', charge_currency: 'USD' })
+  const [clients, setClients] = useState<{ id: number; name: string; active: boolean }[]>([])
+  const [payees, setPayees] = useState<{ id: number; name: string; active: boolean }[]>([])
+  const [newPayee, setNewPayee] = useState('')
   const [scopes, setScopes] = useState<string[]>([])
   const [orderType, setOrderType] = useState('training')
   const [termForm, setTermForm] = useState(EMPTY_TERM)
@@ -38,7 +41,7 @@ export default function CodeDetail() {
         setCode(c)
         setMeta({
           name: c.name ?? '',
-          issued_to: c.issued_to ?? '',
+          client_id: c.client_id?.toString() ?? '',
           notes: c.notes ?? '',
           max_uses: c.max_uses?.toString() ?? '',
           expires_at: c.expires_at?.slice(0, 10) ?? '',
@@ -51,6 +54,10 @@ export default function CodeDetail() {
       .catch(() => setNotFound(true))
   }
   useEffect(load, [codeParam])
+  useEffect(() => {
+    get<{ clients: typeof clients }>('/clients').then((r) => setClients(r.clients))
+    get<{ payees: typeof payees }>('/payees').then((r) => setPayees(r.payees))
+  }, [])
 
   const run = async (fn: () => Promise<unknown>) => {
     setError(null)
@@ -73,7 +80,7 @@ export default function CodeDetail() {
   const saveMeta = () =>
     run(() => patch(`/codes/${codeParam}`, {
       name: meta.name,
-      issued_to: meta.issued_to || null,
+      client_id: meta.client_id ? Number(meta.client_id) : null,
       notes: meta.notes || null,
       max_uses: meta.max_uses ? Number(meta.max_uses) : null,
       expires_at: meta.expires_at || null,
@@ -84,7 +91,7 @@ export default function CodeDetail() {
   const saveScopesAndType = () => run(() => patch(`/codes/${codeParam}`, { order_type: orderType, allowed_scopes: scopes }))
 
   const termPayload = () => ({
-    recipient: termForm.recipient,
+    payee_id: Number(termForm.payee_id),
     category: termForm.category,
     payout_type: termForm.payout_type || null,
     kind: termForm.kind,
@@ -108,8 +115,16 @@ export default function CodeDetail() {
 
   const startEditTerm = (t: Term) => {
     setEditingTerm(t.id)
-    setTermForm({ recipient: t.recipient, category: t.category, payout_type: t.payout_type ?? '', kind: t.kind, amount: t.amount, currency: t.currency, language: t.language ?? '' })
+    setTermForm({ payee_id: t.payee_id?.toString() ?? '', category: t.category, payout_type: t.payout_type ?? '', kind: t.kind, amount: t.amount, currency: t.currency, language: t.language ?? '' })
   }
+
+  const quickAddPayee = () =>
+    run(async () => {
+      const r = await post<{ id: number; name: string }>('/payees', { name: newPayee })
+      setPayees((p) => [...p, { id: r.id, name: r.name, active: true }])
+      setTermForm((f) => ({ ...f, payee_id: r.id.toString() }))
+      setNewPayee('')
+    })
 
   if (notFound) {
     return (
@@ -164,7 +179,14 @@ export default function CodeDetail() {
       <Card title="Metadata & charge">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Name"><input className={inputClass} value={meta.name} onChange={(e) => setMeta({ ...meta, name: e.target.value })} /></Field>
-          <Field label="Issued to"><input className={inputClass} value={meta.issued_to} onChange={(e) => setMeta({ ...meta, issued_to: e.target.value })} /></Field>
+          <Field label="Client">
+            <select className={inputClass} value={meta.client_id} onChange={(e) => setMeta({ ...meta, client_id: e.target.value })}>
+              <option value="">— none —</option>
+              {clients.filter((c) => c.active || c.id.toString() === meta.client_id).map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </Field>
           <Field label="Charge per order (future orders only)"><input className={inputClass} type="number" min="0" step="0.01" value={meta.charge_amount} onChange={(e) => setMeta({ ...meta, charge_amount: e.target.value })} /></Field>
           <Field label="Charge currency"><input className={inputClass} maxLength={3} value={meta.charge_currency} onChange={(e) => setMeta({ ...meta, charge_currency: e.target.value.toUpperCase() })} /></Field>
           <Field label="Max uses (blank = unlimited)"><input className={inputClass} type="number" min="1" value={meta.max_uses} onChange={(e) => setMeta({ ...meta, max_uses: e.target.value })} /></Field>
@@ -236,7 +258,13 @@ export default function CodeDetail() {
             <li key={t.id} className="rounded-lg border border-gray-100 p-3 text-sm">
               {editingTerm === t.id ? (
                 <div className="flex flex-wrap items-end gap-2">
-                  <Field label="Recipient"><input className={inputClass} value={termForm.recipient} onChange={(e) => setTermForm({ ...termForm, recipient: e.target.value })} /></Field>
+                  <Field label="Payee">
+                    <select className={inputClass} value={termForm.payee_id} onChange={(e) => setTermForm({ ...termForm, payee_id: e.target.value })}>
+                      {payees.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </Field>
                   <Field label="Amount"><input className={inputClass} type="number" step="0.01" value={termForm.amount} onChange={(e) => setTermForm({ ...termForm, amount: e.target.value })} /></Field>
                   <Button onClick={() => saveTermEdit(t.id)}>Save</Button>
                   <Button kind="secondary" onClick={() => setEditingTerm(null)}>Cancel</Button>
@@ -264,7 +292,20 @@ export default function CodeDetail() {
           <>
             <h3 className="mb-2 text-xs font-semibold uppercase text-gray-400">Add a line</h3>
             <div className="flex flex-wrap items-end gap-3">
-              <Field label="Recipient"><input className={inputClass} value={termForm.recipient} onChange={(e) => setTermForm({ ...termForm, recipient: e.target.value })} /></Field>
+              <Field label="Payee">
+                <select className={inputClass} value={termForm.payee_id} onChange={(e) => setTermForm({ ...termForm, payee_id: e.target.value })}>
+                  <option value="">— pick —</option>
+                  {payees.filter((p) => p.active).map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="…or new payee">
+                <span className="flex gap-2">
+                  <input className={`${inputClass} w-36`} value={newPayee} onChange={(e) => setNewPayee(e.target.value)} />
+                  <Button kind="secondary" onClick={quickAddPayee} disabled={newPayee.trim() === ''}>Add</Button>
+                </span>
+              </Field>
               <Field label="Category">
                 <select className={inputClass} value={termForm.category} onChange={(e) => setTermForm({ ...termForm, category: e.target.value, payout_type: e.target.value === 'residual' ? 'residual_margin' : termForm.payout_type })}>
                   {Object.entries(PAYOUT_CATEGORY_LABELS).map(([value, label]) => (
@@ -303,7 +344,7 @@ export default function CodeDetail() {
                   <option value="pt">Portuguese only</option>
                 </select>
               </Field>
-              <Button onClick={addTerm} disabled={termForm.recipient.trim() === '' || (termForm.category !== 'residual' && termForm.amount === '')}>
+              <Button onClick={addTerm} disabled={termForm.payee_id === '' || (termForm.category !== 'residual' && termForm.amount === '')}>
                 Add line
               </Button>
             </div>

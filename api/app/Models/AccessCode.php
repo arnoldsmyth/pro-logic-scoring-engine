@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
@@ -24,6 +25,11 @@ class AccessCode extends Model
             'expires_at' => 'datetime',
             'charge_amount' => 'decimal:4',
         ];
+    }
+
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
     }
 
     public function payoutTerms(): HasMany
@@ -142,6 +148,7 @@ class AccessCode extends Model
             ->where(fn ($q) => $q->whereNull('effective_from')->orWhere('effective_from', '<=', now()))
             ->where(fn ($q) => $q->whereNull('effective_until')->orWhere('effective_until', '>', now()))
             ->when($language !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('language')->orWhere('language', $language)))
+            ->with('payee')
             ->get();
 
         $lines = [];
@@ -161,12 +168,18 @@ class AccessCode extends Model
         return $lines;
     }
 
-    /** @return array{payout_term_id: int, recipient: string, category: string, payout_type: ?string, amount: float, currency: string, language: ?string} */
+    /**
+     * recipient is a snapshot of the payee's name at charge time — the
+     * ledger stays readable even if the payee record is renamed later.
+     *
+     * @return array{payout_term_id: int, payee_id: ?int, recipient: string, category: string, payout_type: ?string, amount: float, currency: string, language: ?string}
+     */
     private function line(PayoutTerm $term, float $amount): array
     {
         return [
             'payout_term_id' => $term->id,
-            'recipient' => $term->recipient,
+            'payee_id' => $term->payee_id,
+            'recipient' => $term->payee?->name ?? '(unknown payee)',
             'category' => $term->category,
             'payout_type' => $term->payout_type,
             'amount' => $amount,

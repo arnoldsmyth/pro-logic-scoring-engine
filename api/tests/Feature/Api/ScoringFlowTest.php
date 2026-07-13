@@ -7,6 +7,7 @@ use App\Models\ApiKey;
 use App\Models\Charge;
 use App\Models\NormSample;
 use App\Models\NormSet;
+use App\Models\Payee;
 use App\Models\PayoutTerm;
 use App\Models\UsageEvent;
 use App\Models\WebhookDelivery;
@@ -191,7 +192,7 @@ class ScoringFlowTest extends TestCase
         ]);
         PayoutTerm::create([
             'access_code_id' => $code->id,
-            'recipient' => 'content-owner',
+            'payee_id' => Payee::create(['name' => 'content-owner'])->id,
             'category' => 'royalty',
             'payout_type' => 'pro_d_royalty',
             'kind' => 'flat',

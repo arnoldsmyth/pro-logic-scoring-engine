@@ -2,9 +2,11 @@
 
 use App\Http\Controllers\Panel\AssessmentsController;
 use App\Http\Controllers\Panel\AuthController;
+use App\Http\Controllers\Panel\ClientsController;
 use App\Http\Controllers\Panel\CodesController;
 use App\Http\Controllers\Panel\KeysController;
 use App\Http\Controllers\Panel\NormsController;
+use App\Http\Controllers\Panel\PayeesController;
 use App\Http\Controllers\Panel\PipelineController;
 use App\Http\Controllers\Panel\StatsController;
 use Illuminate\Support\Facades\Route;
@@ -24,6 +26,8 @@ Route::prefix('panel/api')->middleware('web')->group(function () {
         Route::get('stats', [StatsController::class, 'index']);
 
         Route::get('keys', [KeysController::class, 'index']);
+        Route::get('clients', [ClientsController::class, 'index']);
+        Route::get('payees', [PayeesController::class, 'index']);
         Route::get('codes', [CodesController::class, 'index']);
         Route::get('codes/statement', [CodesController::class, 'statement']);
         Route::get('codes/statement.csv', [CodesController::class, 'statementCsv']);
@@ -41,6 +45,11 @@ Route::prefix('panel/api')->middleware('web')->group(function () {
         Route::get('content/translations-summary', [PipelineController::class, 'translationsSummary']);
 
         Route::middleware('panel.role:admin')->group(function () {
+            Route::post('clients', [ClientsController::class, 'store']);
+            Route::patch('clients/{client}', [ClientsController::class, 'update']);
+            Route::post('payees', [PayeesController::class, 'store']);
+            Route::patch('payees/{payee}', [PayeesController::class, 'update']);
+
             Route::post('keys', [KeysController::class, 'store']);
             Route::patch('keys/{key}', [KeysController::class, 'update']);
             Route::post('keys/{key}/rotate', [KeysController::class, 'rotate']);
