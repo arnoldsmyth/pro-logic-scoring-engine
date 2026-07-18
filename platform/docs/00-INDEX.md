@@ -1,6 +1,6 @@
 # Pro Scoring Platform v2 — Master Index
 
-**Status: BUILD IN PROGRESS (repo created 2026-07-10). Phases 1–4 of the build order below are done: `api/` Laravel skeleton + CI, `legacy:import`, `goldens:verify` harness, and the scoring engine — 68/68 golden masters reproduce exactly in BOTH result formats. Current phase: 5 (API layer + access codes). Work tracked in beads (`bd ready`).**
+**Status: BUILD IN PROGRESS. Phases 1–7 done: Laravel skeleton + CI, migration seeds, golden harness, engine (68/68 goldens both formats), v2 API + access codes, norm analytics + versioned sets, React control panel. The charges & payouts model (order types, charge/payout ledgers, lead→sale conversion — see 07 + `development-assets/charges-payouts-data-model.md`) and normalized clients/payees are also live. Remaining: Phase 8 (pooled-v1), deployment + legacy cutover epics, Stripe billing. Work tracked in beads (`bd ready`).**
 
 This doc set is written so a build agent can implement the system without re-deriving anything. Read in order for full context; each doc stands alone for its area.
 
@@ -12,7 +12,7 @@ This doc set is written so a build agent can implement the system without re-der
 | [04-scoring-engine.md](04-scoring-engine.md) | Rule-interpreter design; ~15 primitives; dependency matrix; scopes; gender-split norms |
 | [05-api-design.md](05-api-design.md) | Endpoints, behaviors, OpenAPI, errors, webhooks, non-goals |
 | [06-norms.md](06-norms.md) | Versioned norm sets; pooled-v1 derivation; new-language pipeline; drift analytics |
-| [07-access-codes-royalties.md](07-access-codes-royalties.md) | Code types (training/bizdev/derivative — derivative pays no royalty); metering; Stripe-later |
+| [07-access-codes-royalties.md](07-access-codes-royalties.md) | Order types; charges & payouts ledgers; payout schedules + residual; conversion; Stripe-later |
 | [08-control-panel.md](08-control-panel.md) | Panel views; **under-the-hood documentation requirement**; audit trace UI |
 | [09-architecture-deployment.md](09-architecture-deployment.md) | Laravel 11 + MySQL 8 + React; DO/Cloud Run; CI; security; repo layout |
 | [10-verification.md](10-verification.md) | 68 golden masters; test harness (build FIRST); privacy rules |
