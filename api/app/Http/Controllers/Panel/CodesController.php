@@ -142,6 +142,10 @@ class CodesController extends Controller
                 return response()->json(['error' => ['code' => 'unknown_scope', 'message' => 'Unknown scope(s): '.implode(', ', $unknown).'.']], 422);
             }
         }
+        if (isset($data['charge_currency']) && $data['charge_currency'] !== $code->charge_currency
+            && $code->payoutTerms()->where('active', true)->exists()) {
+            return response()->json(['error' => ['code' => 'currency_mismatch', 'message' => 'This code has active payout lines in the current currency — end them before changing the charge currency.']], 422);
+        }
 
         $code->update($data);
 
@@ -166,12 +170,18 @@ class CodesController extends Controller
         if ($data['category'] === 'residual' && $code->payoutTerms()->where('active', true)->where('category', 'residual')->exists()) {
             return response()->json(['error' => ['code' => 'residual_exists', 'message' => 'This code already has an active residual line — end it first. Exactly one line can absorb the balance.']], 422);
         }
+        // Payout lines must be in the code's charge currency (prolog-agc):
+        // the residual is computed as charge − sum(lines), which is only
+        // meaningful when everything shares one currency.
+        if (isset($data['currency']) && $data['currency'] !== $code->charge_currency) {
+            return response()->json(['error' => ['code' => 'currency_mismatch', 'message' => "Payout lines must use the code's charge currency ({$code->charge_currency}) — the schedule must sum to the charge in one currency."]], 422);
+        }
 
         $term = $code->payoutTerms()->create([
             ...$data,
             'kind' => $data['kind'] ?? 'flat',
             'amount' => $data['amount'] ?? 0,
-            'currency' => $data['currency'] ?? $code->charge_currency,
+            'currency' => $code->charge_currency,
         ]);
 
         return response()->json($this->summarizeTerm($term), 201);
@@ -202,6 +212,9 @@ class CodesController extends Controller
             'effective_from' => ['nullable', 'date'],
             'effective_until' => ['nullable', 'date'],
         ]);
+        if (isset($data['currency']) && $data['currency'] !== $term->accessCode->charge_currency) {
+            return response()->json(['error' => ['code' => 'currency_mismatch', 'message' => "Payout lines must use the code's charge currency ({$term->accessCode->charge_currency})."]], 422);
+        }
         $term->update($data);
 
         return response()->json($this->summarizeTerm($term));

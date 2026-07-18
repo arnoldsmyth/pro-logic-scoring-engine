@@ -7,7 +7,7 @@ import { Badge, Button, Card, Explainer, Field, inputClass } from '../../compone
 import { ORDER_TYPE_LABELS, PAYOUT_CATEGORY_LABELS, PAYOUT_TYPE_OPTIONS, SCOPE_LABELS, TERM_KIND_LABELS } from '../../labels'
 import type { CodeDetail as CodeDetailType, Term } from './types'
 
-const EMPTY_TERM = { payee_id: '', category: 'royalty', payout_type: 'pro_d_royalty', kind: 'flat', amount: '', currency: 'USD', language: '' }
+const EMPTY_TERM = { payee_id: '', category: 'royalty', payout_type: 'pro_d_royalty', kind: 'flat', amount: '', language: '' }
 const orderTypeTone = { training: 'blue', complimentary: 'gray', lead: 'amber', sale: 'green' } as const
 
 function describeTerm(t: Term): string {
@@ -96,7 +96,7 @@ export default function CodeDetail() {
     payout_type: termForm.payout_type || null,
     kind: termForm.kind,
     amount: termForm.category === 'residual' ? 0 : Number(termForm.amount),
-    currency: termForm.currency,
+    currency: code?.charge_currency ?? 'USD', // schedule always in the charge currency (prolog-agc)
     language: termForm.language || null,
   })
 
@@ -115,7 +115,7 @@ export default function CodeDetail() {
 
   const startEditTerm = (t: Term) => {
     setEditingTerm(t.id)
-    setTermForm({ payee_id: t.payee_id?.toString() ?? '', category: t.category, payout_type: t.payout_type ?? '', kind: t.kind, amount: t.amount, currency: t.currency, language: t.language ?? '' })
+    setTermForm({ payee_id: t.payee_id?.toString() ?? '', category: t.category, payout_type: t.payout_type ?? '', kind: t.kind, amount: t.amount, language: t.language ?? '' })
   }
 
   const quickAddPayee = () =>
@@ -335,7 +335,9 @@ export default function CodeDetail() {
                   </Field>
                 </>
               )}
-              <Field label="Currency"><input className={`${inputClass} w-20`} maxLength={3} value={termForm.currency} onChange={(e) => setTermForm({ ...termForm, currency: e.target.value.toUpperCase() })} /></Field>
+              <Field label="Currency">
+                <span className="inline-flex h-9 items-center rounded-lg bg-gray-100 px-3 text-sm text-gray-500" title="Payout lines always use the code's charge currency so the schedule sums to the charge">{code.charge_currency}</span>
+              </Field>
               <Field label="Language">
                 <select className={inputClass} value={termForm.language} onChange={(e) => setTermForm({ ...termForm, language: e.target.value })}>
                   <option value="">All languages</option>

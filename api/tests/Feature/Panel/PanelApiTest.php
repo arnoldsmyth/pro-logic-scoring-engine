@@ -379,6 +379,32 @@ class PanelApiTest extends TestCase
         $this->assertCount(3, $rows, 'header + one row per payout line (2), no row for the $0 repeat');
     }
 
+    public function test_payout_lines_must_match_the_codes_charge_currency(): void
+    {
+        $this->actingAs($this->admin());
+        $code = AccessCode::create(['code' => 'ac_cur', 'name' => 'Currency test', 'order_type' => 'sale', 'charge_amount' => 100, 'charge_currency' => 'USD', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
+        $payee = Payee::create(['name' => 'euro-payee']);
+
+        // Mismatched currency refused; matching (or omitted) accepted.
+        $this->postJson('/panel/api/codes/ac_cur/terms', ['payee_id' => $payee->id, 'category' => 'royalty', 'kind' => 'flat', 'amount' => 5, 'currency' => 'EUR'])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'currency_mismatch');
+        $termId = $this->postJson('/panel/api/codes/ac_cur/terms', ['payee_id' => $payee->id, 'category' => 'royalty', 'kind' => 'flat', 'amount' => 5])
+            ->assertStatus(201)->json('id');
+        $this->assertSame('USD', PayoutTerm::find($termId)->currency);
+
+        $this->patchJson("/panel/api/terms/{$termId}", ['currency' => 'EUR'])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'currency_mismatch');
+
+        // Changing the code's charge currency is blocked while active lines exist.
+        $this->patchJson('/panel/api/codes/ac_cur', ['charge_currency' => 'EUR'])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'currency_mismatch');
+        $this->postJson("/panel/api/terms/{$termId}/end")->assertOk();
+        $this->patchJson('/panel/api/codes/ac_cur', ['charge_currency' => 'EUR'])->assertOk();
+    }
+
     public function test_clients_and_payees_crud(): void
     {
         $this->actingAs($this->admin());
