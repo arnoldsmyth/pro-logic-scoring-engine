@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import {
-  BookOpen, FlaskConical, KeyRound, LayoutDashboard, LogOut, Menu,
+  BookOpen, FileBarChart, FlaskConical, KeyRound, LayoutDashboard, LogOut, Menu,
   Ticket, Users, Workflow, X,
 } from 'lucide-react'
 import { AuthProvider, useAuth } from './auth'
@@ -15,6 +15,7 @@ import Keys from './views/Keys'
 import Login from './views/Login'
 import Norms from './views/Norms'
 import Pipeline from './views/Pipeline'
+import Reports from './views/Reports'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -24,6 +25,7 @@ const NAV = [
   { to: '/norms', label: 'Norms & analytics', icon: FlaskConical },
   { to: '/pipeline', label: 'Pipeline', icon: Workflow },
   { to: '/content', label: 'Content', icon: BookOpen },
+  { to: '/reports', label: 'Reports', icon: FileBarChart },
 ]
 
 function Nav({ onNavigate }: { onNavigate?: () => void }) {
@@ -150,6 +152,7 @@ function Shell() {
             <Route path="/norms" element={<Norms />} />
             <Route path="/pipeline" element={<Pipeline />} />
             <Route path="/content" element={<Content />} />
+            <Route path="/reports" element={<Reports />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

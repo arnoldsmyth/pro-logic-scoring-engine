@@ -8,6 +8,7 @@ use App\Http\Controllers\Panel\KeysController;
 use App\Http\Controllers\Panel\NormsController;
 use App\Http\Controllers\Panel\PayeesController;
 use App\Http\Controllers\Panel\PipelineController;
+use App\Http\Controllers\Panel\ReportsController;
 use App\Http\Controllers\Panel\StatsController;
 use Illuminate\Support\Facades\Route;
 
@@ -32,6 +33,9 @@ Route::prefix('panel/api')->middleware('web')->group(function () {
         Route::get('codes/statement', [CodesController::class, 'statement']);
         Route::get('codes/statement.csv', [CodesController::class, 'statementCsv']);
         Route::get('codes/{code}', [CodesController::class, 'show']);
+
+        Route::get('reports/royalties', [ReportsController::class, 'royalties']);
+        Route::get('reports/royalties.csv', [ReportsController::class, 'royaltiesCsv']);
 
         Route::get('assessments', [AssessmentsController::class, 'index']);
         Route::get('assessments/{publicId}', [AssessmentsController::class, 'show']);

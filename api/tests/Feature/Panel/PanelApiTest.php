@@ -5,6 +5,8 @@ namespace Tests\Feature\Panel;
 use App\Models\AccessCode;
 use App\Models\ApiKey;
 use App\Models\Assessment;
+use App\Models\Charge;
+use App\Models\Client;
 use App\Models\NormSet;
 use App\Models\Payee;
 use App\Models\PayoutTerm;
@@ -259,6 +261,122 @@ class PanelApiTest extends TestCase
         $this->assertStringContainsString('Full product sale', $csv);
         $this->assertStringContainsString('residual_margin', $csv);
         $this->assertStringContainsString('order-11', $csv);
+    }
+
+    /**
+     * Royalty Statement report: reads the charges + payouts ledgers,
+     * per-currency (never blended), across two payees and two currencies,
+     * including a $0 repeat (no payouts) and a negative residual, plus a
+     * paid line so net_owed differs from accrued.
+     */
+    public function test_royalty_report_totals_grouping_and_filters(): void
+    {
+        $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
+        $acme = Payee::create(['name' => 'Acme Content']);
+        $globe = Payee::create(['name' => 'Globe Media']);
+        $client = Client::create(['name' => 'Acme Corp']);
+
+        // Code A: USD sale, acme royalty 40 + globe residual 60.
+        $codeA = AccessCode::create(['code' => 'ac_A', 'name' => 'USD sale', 'order_type' => 'sale', 'charge_amount' => 100, 'charge_currency' => 'USD', 'product_code' => 'VC18', 'allowed_scopes' => ['full'], 'client_id' => $client->id]);
+        $codeA->payoutTerms()->create(['payee_id' => $acme->id, 'category' => 'royalty', 'payout_type' => 'pro_d_royalty', 'kind' => 'flat', 'amount' => 40, 'currency' => 'USD']);
+        $codeA->payoutTerms()->create(['payee_id' => $globe->id, 'category' => 'residual', 'payout_type' => 'residual_margin', 'kind' => 'flat', 'amount' => 0, 'currency' => 'USD']);
+
+        // Code B: EUR sale, globe royalty 40 > charge 30 -> acme residual -10.
+        $codeB = AccessCode::create(['code' => 'ac_B', 'name' => 'EUR sale', 'order_type' => 'sale', 'charge_amount' => 30, 'charge_currency' => 'EUR', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
+        $codeB->payoutTerms()->create(['payee_id' => $globe->id, 'category' => 'royalty', 'payout_type' => 'pro_d_royalty', 'kind' => 'flat', 'amount' => 40, 'currency' => 'EUR']);
+        $codeB->payoutTerms()->create(['payee_id' => $acme->id, 'category' => 'residual', 'payout_type' => 'residual_margin', 'kind' => 'flat', 'amount' => 0, 'currency' => 'EUR']);
+
+        $charge = function (AccessCode $code, string $order, string $lang) use ($key) {
+            $a = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => $lang, 'external_id' => $order]);
+            $e = UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $code->id, 'code_type' => $code->order_type, 'product_code' => 'VC18', 'assessment_id' => $a->id, 'scopes' => ['mcs'], 'fees_due' => [], 'created_at' => now()]);
+
+            return $code->recordCharge($e, $a, $lang);
+        };
+
+        $a1 = $charge($codeA, 'order-A', 'en');   // real: acme 40 USD, globe 60 USD
+        $charge($codeA, 'order-A', 'en');         // $0 repeat, no payouts
+        $charge($codeB, 'order-B', 'en');         // real: globe 40 EUR, acme -10 EUR
+
+        // Backdated charge (outside the default window) to prove from/to.
+        $old = $charge($codeA, 'order-OLD', 'en');
+        Charge::whereKey($old->id)->update(['created_at' => now()->subMonths(3)]);
+
+        // Mark globe's USD residual on A1 as paid so net_owed != accrued.
+        $a1->payouts()->where('payee_id', $globe->id)->update(['status' => 'paid']);
+
+        $this->actingAs($this->viewer()); // viewer (non-admin) CAN read reports
+
+        $json = $this->getJson('/panel/api/reports/royalties')->assertOk()->json();
+
+        // Window excludes the backdated charge: 3 charges, 1 repeat.
+        $this->assertSame(3, $json['totals']['charges']);
+        $this->assertSame(1, $json['totals']['repeat_charges']);
+
+        // Per-currency totals, never blended.
+        $this->assertEquals(40, $json['totals']['accrued']['USD']); // acme royalty (globe's 60 is paid)
+        $this->assertEquals(30, $json['totals']['accrued']['EUR']); // globe 40 + acme -10
+        $this->assertEquals(60, $json['totals']['paid']['USD']);
+        $this->assertEquals(-20, $json['totals']['net_owed']['USD']); // 40 - 60
+        $this->assertEquals(30, $json['totals']['net_owed']['EUR']);
+        $this->assertSame('payee', $json['group_by']);
+
+        // group_by=payee: per-payee accrued per currency + net_owed.
+        $byKey = collect($json['groups'])->keyBy('key');
+        $acmeG = $byKey["payee:{$acme->id}"];
+        $this->assertEquals(40, $acmeG['totals']['accrued']['USD']);
+        $this->assertEquals(-10, $acmeG['totals']['accrued']['EUR']); // negative residual passes through
+        $globeG = $byKey["payee:{$globe->id}"];
+        $this->assertEquals(40, $globeG['totals']['accrued']['EUR']);
+        $this->assertEquals(60, $globeG['totals']['paid']['USD']);
+        $this->assertEquals(-60, $globeG['totals']['net_owed']['USD']);
+        $this->assertSame('Acme Content', $acmeG['label']);
+
+        // payee_id filter narrows to one payee.
+        $onlyAcme = $this->getJson("/panel/api/reports/royalties?payee_id={$acme->id}")->assertOk()->json();
+        $this->assertCount(1, $onlyAcme['groups']);
+        $this->assertSame("payee:{$acme->id}", $onlyAcme['groups'][0]['key']);
+
+        // status filter: only accrued lines feed money totals.
+        $accruedOnly = $this->getJson('/panel/api/reports/royalties?status=accrued')->assertOk()->json();
+        $this->assertArrayNotHasKey('USD', $accruedOnly['totals']['paid']);
+        $this->assertEquals(40, $accruedOnly['totals']['accrued']['USD']);
+        $this->assertSame(3, $accruedOnly['totals']['charges'], 'charge count ignores the status filter');
+
+        // from/to widens to include the backdated charge.
+        $wide = $this->getJson('/panel/api/reports/royalties?from='.now()->subMonths(6)->toDateString())->assertOk()->json();
+        $this->assertSame(4, $wide['totals']['charges']);
+
+        // group_by=client resolves via accessCode.client, fallback "(no client)".
+        $byClient = $this->getJson('/panel/api/reports/royalties?group_by=client')->assertOk()->json();
+        $labels = collect($byClient['groups'])->pluck('label');
+        $this->assertTrue($labels->contains('Acme Corp'));
+        $this->assertTrue($labels->contains('(no client)'));
+    }
+
+    public function test_royalty_report_csv(): void
+    {
+        $key = ApiKey::create([...ApiKey::generate()['attributes'], 'name' => 'k']);
+        $acme = Payee::create(['name' => 'Acme Content']);
+        $us = Payee::create(['name' => 'Us']);
+        $code = AccessCode::create(['code' => 'ac_csv', 'name' => 'CSV sale', 'order_type' => 'sale', 'charge_amount' => 100, 'charge_currency' => 'USD', 'product_code' => 'VC18', 'allowed_scopes' => ['full']]);
+        $code->payoutTerms()->create(['payee_id' => $acme->id, 'category' => 'royalty', 'payout_type' => 'pro_d_royalty', 'kind' => 'flat', 'amount' => 30, 'currency' => 'USD']);
+        $code->payoutTerms()->create(['payee_id' => $us->id, 'category' => 'residual', 'payout_type' => 'residual_margin', 'kind' => 'flat', 'amount' => 0, 'currency' => 'USD']);
+
+        $a = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en', 'external_id' => 'order-1']);
+        $e = UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $code->id, 'code_type' => 'sale', 'product_code' => 'VC18', 'assessment_id' => $a->id, 'scopes' => ['mcs'], 'fees_due' => [], 'created_at' => now()]);
+        $code->recordCharge($e, $a, 'en'); // real charge -> 2 payout lines
+        // A $0 repeat (no payouts) must NOT produce a CSV row.
+        $a2 = Assessment::create(['api_key_id' => $key->id, 'firstname' => 'A', 'lastname' => 'B', 'email' => 'a@b.c', 'language' => 'en', 'external_id' => 'order-1']);
+        $e2 = UsageEvent::create(['api_key_id' => $key->id, 'access_code_id' => $code->id, 'code_type' => 'sale', 'product_code' => 'VC18', 'assessment_id' => $a2->id, 'scopes' => ['mcs'], 'fees_due' => [], 'created_at' => now()]);
+        $code->recordCharge($e2, $a2, 'en');
+
+        $this->actingAs($this->viewer());
+        $res = $this->get('/panel/api/reports/royalties.csv')->assertOk();
+        $this->assertStringContainsString('royalty-statement.csv', $res->headers->get('content-disposition'));
+
+        $rows = array_values(array_filter(explode("\n", trim($res->streamedContent()))));
+        $this->assertSame('payout_id,payee_id,recipient,category,payout_type,amount,currency,language,status,charge_id,original_charge_id,product_code,external_order_id,order_type,charge_amount,charge_date', $rows[0]);
+        $this->assertCount(3, $rows, 'header + one row per payout line (2), no row for the $0 repeat');
     }
 
     public function test_clients_and_payees_crud(): void

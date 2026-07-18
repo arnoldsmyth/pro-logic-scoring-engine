@@ -26,3 +26,4 @@ platform/restore-db/goldens/
 .dolt/
 *.db
 .beads-credential-key
+development-assets/Firebase Orders/

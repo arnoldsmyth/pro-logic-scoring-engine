@@ -49,6 +49,13 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
   return body as T
 }
 
+/** Build a query string from a params map, skipping undefined/null/empty values. */
+export const qs = (params: Record<string, string | number | undefined | null>) => {
+  const u = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '') u.set(k, String(v))
+  return u.toString()
+}
+
 export const get = <T,>(path: string) => api<T>(path)
 export const post = <T,>(path: string, body?: unknown) =>
   api<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) })

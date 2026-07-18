@@ -31,6 +31,11 @@ class Payout extends Model
         return $this->belongsTo(Charge::class);
     }
 
+    public function payee(): BelongsTo
+    {
+        return $this->belongsTo(Payee::class);
+    }
+
     public function payoutTerm(): BelongsTo
     {
         return $this->belongsTo(PayoutTerm::class);
