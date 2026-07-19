@@ -12,6 +12,7 @@ export function Explainer({ title, children }: { title: string; children: ReactN
     <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50/70 text-sm">
       <button
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
         className="flex w-full items-center gap-2 px-4 py-2.5 text-left font-medium text-sky-900"
       >
         {open ? <ChevronDown size={16} className="shrink-0 text-sky-500" /> : <ChevronRight size={16} className="shrink-0 text-sky-500" />}
@@ -65,8 +66,8 @@ export function Bars({ data, height = 96 }: { data: Record<string, number>; heig
   const max = Math.max(1, ...entries.map(([, v]) => v))
   return (
     <div className="flex items-end gap-1" style={{ height }}>
-      {entries.map(([label, value]) => (
-        <div key={label} className="group relative flex-1">
+      {entries.map(([label, value], i) => (
+        <div key={label} className="group relative min-w-0 flex-1">
           <div
             className="rounded-t-md bg-sky-500/80 transition-colors group-hover:bg-sky-600"
             style={{ height: Math.max(2, (value / max) * (height - 20)) }}
@@ -74,7 +75,7 @@ export function Bars({ data, height = 96 }: { data: Record<string, number>; heig
           <div className="absolute -top-5 left-1/2 hidden -translate-x-1/2 text-xs text-gray-600 group-hover:block">
             {value}
           </div>
-          <div className="mt-1 origin-left truncate text-[10px] text-gray-400">{label.slice(5)}</div>
+          <div className={`mt-1 whitespace-nowrap text-[10px] text-gray-400 ${i % 2 ? 'hidden sm:block' : ''}`}>{label.slice(5)}</div>
         </div>
       ))}
     </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { get } from '../api'
 import { DataTable, type Column } from '../components/DataTable'
 import { Badge, Button, Card, Explainer, Field, inputClass } from '../components/ui'
@@ -85,6 +85,16 @@ export default function Assessments() {
   const [detail, setDetail] = useState<Detail | null>(null)
   const [audit, setAudit] = useState<Audit | null>(null)
   const [timeline, setTimeline] = useState<Timeline | null>(null)
+  const detailRef = useRef<HTMLDivElement>(null)
+  const auditRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (detail) detailRef.current?.scrollIntoView({ block: 'start' })
+  }, [detail?.public_id])
+
+  useEffect(() => {
+    if (audit) auditRef.current?.scrollIntoView({ block: 'start' })
+  }, [audit])
 
   const search = () => {
     get<{ assessments: Row[] }>(`/assessments?q=${encodeURIComponent(q)}`).then((r) => setRows(r.assessments))
@@ -144,6 +154,7 @@ export default function Assessments() {
       </Card>
 
       {detail && (
+        <div ref={detailRef} className="scroll-mt-20 lg:scroll-mt-4">
         <Card title={`${detail.name} — ${detail.public_id}`}>
           <div className="grid gap-4 lg:grid-cols-2">
             <div>
@@ -186,6 +197,7 @@ export default function Assessments() {
             </div>
           </div>
         </Card>
+        </div>
       )}
 
       {timeline && timeline.takes.length > 1 && (
@@ -233,6 +245,7 @@ export default function Assessments() {
       )}
 
       {audit && (
+        <div ref={auditRef} className="scroll-mt-20 lg:scroll-mt-4">
         <Card title={`Audit trace — norm set ${audit.norm_set}`}>
           <p className="mb-3 text-sm text-gray-500">
             The four-stage cascade as it actually ran. Each stage lists the rules fired in cursor order and the scale
@@ -261,6 +274,7 @@ export default function Assessments() {
           </div>
           <p className="mt-3 text-xs text-gray-400">{audit.content_keys_resolved.length} content keys resolved by the insight stage.</p>
         </Card>
+        </div>
       )}
     </div>
   )

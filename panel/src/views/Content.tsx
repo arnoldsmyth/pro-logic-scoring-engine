@@ -37,7 +37,7 @@ export default function Content() {
 
       {summary && (
         <Card title="Content rows by language">
-          <div className="flex gap-8 text-sm">
+          <div className="flex flex-wrap gap-8 text-sm">
             {Object.entries(summary.content_rows_by_language).map(([lang, tables]) => (
               <div key={lang}>
                 <div className="font-semibold text-gray-700">{lang}</div>
@@ -54,14 +54,16 @@ export default function Content() {
       )}
 
       <Card title="Question text">
-        <div className="mb-4 flex gap-3">
-          <Field label="Tool">
-            <select className={inputClass} value={tool} onChange={(e) => setTool(e.target.value)}>
-              {TOOLS.map((t) => (
-                <option key={t} value={t}>{toolLabel(t)}</option>
-              ))}
-            </select>
-          </Field>
+        <div className="mb-4 flex flex-wrap gap-3">
+          <div className="min-w-[10rem]">
+            <Field label="Tool">
+              <select className={inputClass} value={tool} onChange={(e) => setTool(e.target.value)}>
+                {TOOLS.map((t) => (
+                  <option key={t} value={t}>{toolLabel(t)}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
           <Field label="Language">
             <select className={inputClass} value={language} onChange={(e) => setLanguage(e.target.value)}>
               <option value="en">en</option>

@@ -71,9 +71,9 @@ export function DataTable<T>({
             <div className="mb-2 text-sm font-semibold text-gray-800">{primary.cell(row)}</div>
             <dl className="space-y-1.5">
               {cardColumns.map((c, i) => (
-                <div key={i} className="flex items-baseline justify-between gap-3 text-sm">
+                <div key={i} className="flex flex-wrap items-baseline justify-between gap-3 text-sm">
                   <dt className="shrink-0 text-xs uppercase tracking-wide text-gray-400">{c.header}</dt>
-                  <dd className="min-w-0 text-right text-gray-600">{c.cell(row)}</dd>
+                  <dd className="min-w-0 ml-auto break-words text-right text-gray-600">{c.cell(row)}</dd>
                 </div>
               ))}
             </dl>

@@ -4,8 +4,10 @@ import tailwindcss from '@tailwindcss/vite'
 
 // Dev: Vite serves the SPA and proxies API + auth cookies to Laravel.
 // Build: output goes into the Laravel public dir, served at /panel.
-export default defineConfig({
-  base: '/panel-assets/',
+export default defineConfig(({ command }) => ({
+  // Dev must serve under /panel so the router basename matches; the build
+  // keeps /panel-assets/ because Laravel serves the compiled assets there.
+  base: command === 'build' ? '/panel-assets/' : '/panel/',
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
@@ -18,4 +20,4 @@ export default defineConfig({
     outDir: '../api/public/panel-assets',
     emptyOutDir: true,
   },
-})
+}))
