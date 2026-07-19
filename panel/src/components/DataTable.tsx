@@ -36,8 +36,8 @@ export function DataTable<T>({
 
   return (
     <>
-      {/* Desktop table */}
-      <div className="hidden sm:block">
+      {/* Desktop table; wide tables pan inside the card instead of spilling out */}
+      <div className="hidden overflow-x-auto sm:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
