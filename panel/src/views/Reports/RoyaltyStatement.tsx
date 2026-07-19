@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BadgeDollarSign, Coins, Receipt, TrendingUp, Wallet } from 'lucide-react'
-import { get, qs } from '../../api'
+import { get, post, qs } from '../../api'
+import { useAuth } from '../../auth'
 import { DataTable, type Column } from '../../components/DataTable'
 import { DateRangePicker, type DateRange } from '../../components/DateRangePicker'
 import { Badge, Button, Card, Explainer, Field, inputClass, StatCard } from '../../components/ui'
@@ -79,6 +80,8 @@ const today = () => {
 type Payee = { id: number; name: string }
 
 export default function RoyaltyStatement() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [range, setRange] = useState<DateRange>({ from: monthStart(), to: today() })
   const [groupBy, setGroupBy] = useState('payee')
   const [payeeId, setPayeeId] = useState('')
@@ -86,6 +89,9 @@ export default function RoyaltyStatement() {
   const [payees, setPayees] = useState<Payee[]>([])
   const [report, setReport] = useState<RoyaltyReport | null>(null)
   const [loading, setLoading] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
 
   // Params sent to both the JSON fetch and the CSV download — kept identical
   // so the export always mirrors what's on screen.
@@ -115,6 +121,62 @@ export default function RoyaltyStatement() {
 
   const toggleStatus = (s: string) =>
     setStatuses((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]))
+
+  const payLine = async (l: ReportLine) => {
+    if (busy) return
+    if (!window.confirm(`Mark payout #${l.payout_id} to ${l.recipient} as paid?`)) return
+    setBusy(true)
+    setError(null)
+    setNote(null)
+    try {
+      await post(`/payouts/${l.payout_id}/pay`)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Action failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const voidLine = async (l: ReportLine) => {
+    if (busy) return
+    const reason = window.prompt(`Reason for voiding payout #${l.payout_id} to ${l.recipient}:`)
+    if (!reason) return
+    setBusy(true)
+    setError(null)
+    setNote(null)
+    try {
+      await post(`/payouts/${l.payout_id}/void`, { reason })
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Action failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const settleGroup = async (group: ReportGroup) => {
+    if (busy) return
+    const id = Number(group.key.slice('payee:'.length))
+    if (!id) return
+    if (!window.confirm(`Settle all accrued payouts for ${group.label} from ${range.from} to ${range.to}?`)) return
+    setBusy(true)
+    setError(null)
+    setNote(null)
+    try {
+      const r = await post<{ settled: number; totals: Money }>('/payouts/settle', {
+        payee_id: id,
+        from: range.from,
+        to: range.to,
+      })
+      setNote(`Settled ${r.settled} payout(s).`)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Action failed')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const t = report?.totals
 
@@ -191,6 +253,9 @@ export default function RoyaltyStatement() {
         </div>
       </Card>
 
+      {error && <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {note && <p className="rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{note}</p>}
+
       {t && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard label="Total accrued" value={money(t.accrued)} icon={<Coins size={20} strokeWidth={1.75} />} />
@@ -223,16 +288,26 @@ export default function RoyaltyStatement() {
             key={group.key}
             title={group.label}
             actions={
-              <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500">
-                <span>
-                  accrued <span className="font-medium text-gray-700">{money(group.totals.accrued)}</span>
-                </span>
-                <span>
-                  paid <span className="font-medium text-gray-700">{money(group.totals.paid)}</span>
-                </span>
-                <span>
-                  net owed <span className="font-medium text-gray-700">{money(group.totals.net_owed)}</span>
-                </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500">
+                  <span>
+                    accrued <span className="font-medium text-gray-700">{money(group.totals.accrued)}</span>
+                  </span>
+                  <span>
+                    paid <span className="font-medium text-gray-700">{money(group.totals.paid)}</span>
+                  </span>
+                  <span>
+                    net owed <span className="font-medium text-gray-700">{money(group.totals.net_owed)}</span>
+                  </span>
+                </div>
+                {isAdmin &&
+                  groupBy === 'payee' &&
+                  group.key !== 'payee:0' &&
+                  Object.keys(group.totals.accrued).length > 0 && (
+                    <Button kind="secondary" disabled={busy} onClick={() => settleGroup(group)}>
+                      Settle accrued
+                    </Button>
+                  )}
               </div>
             }
           >
@@ -299,6 +374,18 @@ export default function RoyaltyStatement() {
                       ),
                   },
                 ] satisfies Column<ReportLine>[]
+              }
+              actions={(l) =>
+                isAdmin && l.status === 'accrued' ? (
+                  <div className="flex gap-2">
+                    <Button kind="secondary" disabled={busy} onClick={() => payLine(l)}>
+                      Mark paid
+                    </Button>
+                    <Button kind="secondary" disabled={busy} onClick={() => voidLine(l)}>
+                      Void…
+                    </Button>
+                  </div>
+                ) : null
               }
             />
           </Card>

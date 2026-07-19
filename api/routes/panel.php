@@ -7,6 +7,7 @@ use App\Http\Controllers\Panel\CodesController;
 use App\Http\Controllers\Panel\KeysController;
 use App\Http\Controllers\Panel\NormsController;
 use App\Http\Controllers\Panel\PayeesController;
+use App\Http\Controllers\Panel\PayoutsController;
 use App\Http\Controllers\Panel\PipelineController;
 use App\Http\Controllers\Panel\ReportsController;
 use App\Http\Controllers\Panel\StatsController;
@@ -36,6 +37,8 @@ Route::prefix('panel/api')->middleware('web')->group(function () {
 
         Route::get('reports/royalties', [ReportsController::class, 'royalties']);
         Route::get('reports/royalties.csv', [ReportsController::class, 'royaltiesCsv']);
+        Route::get('reports/payout-aging', [PayoutsController::class, 'aging']);
+        Route::get('reports/volume', [ReportsController::class, 'volume']);
 
         Route::get('assessments', [AssessmentsController::class, 'index']);
         Route::get('assessments/{publicId}', [AssessmentsController::class, 'show']);
@@ -63,6 +66,10 @@ Route::prefix('panel/api')->middleware('web')->group(function () {
             Route::post('codes/{code}/terms', [CodesController::class, 'addTerm']);
             Route::patch('terms/{term}', [CodesController::class, 'updateTerm']);
             Route::post('terms/{term}/end', [CodesController::class, 'endTerm']);
+
+            Route::post('payouts/settle', [PayoutsController::class, 'settle']);
+            Route::post('payouts/{payout}/pay', [PayoutsController::class, 'pay']);
+            Route::post('payouts/{payout}/void', [PayoutsController::class, 'voidPayout']);
 
             Route::post('norms/{set:slug}/impact', [NormsController::class, 'impact']);
             Route::post('norms/{set:slug}/promote', [NormsController::class, 'promote']);

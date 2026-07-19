@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
+use App\Models\Assessment;
 use App\Models\Charge;
+use App\Models\ScoredResult;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -30,6 +34,8 @@ class ReportsController extends Controller
     private const GROUP_BY = ['payee', 'client', 'code', 'order_type'];
 
     private const STATUSES = ['accrued', 'paid', 'void'];
+
+    private const VOLUME_GROUP_BY = ['language', 'gender', 'client', 'scope'];
 
     public function royalties(Request $request): JsonResponse
     {
@@ -105,6 +111,45 @@ class ReportsController extends Controller
             }
             fclose($out);
         }, 'royalty-statement.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    /**
+     * Assessment-volume report: how many assessments were created and how
+     * many results were scored, over a day-by-day series plus a slice
+     * breakdown by language/gender/client/scope. Aggregated in PHP over
+     * eager-loaded queries — the dataset is small, matching house style.
+     *
+     * Creation and scoring are counted on their own natural timestamps
+     * (assessments.created_at / scored_results.scored_at); slice dimensions
+     * (language, gender, client) always come from the owning assessment, so
+     * a scored result attributes to its assessment's language/gender/client
+     * even if the assessment itself was created outside the window.
+     */
+    public function volume(Request $request): JsonResponse
+    {
+        [$from, $to] = $this->volumeWindow($request);
+        $groupBy = $this->volumeGroupBy($request);
+
+        $assessments = Assessment::query()
+            ->with('apiKey.client')
+            ->whereBetween('created_at', [$from.' 00:00:00', $to.' 23:59:59'])
+            ->get();
+
+        $results = ScoredResult::query()
+            ->with('assessment.apiKey.client')
+            ->whereBetween('scored_at', [$from.' 00:00:00', $to.' 23:59:59'])
+            ->get();
+
+        return response()->json([
+            'period' => ['from' => $from, 'to' => $to],
+            'group_by' => $groupBy,
+            'totals' => [
+                'created' => $assessments->count(),
+                'scored' => $results->count(),
+            ],
+            'series' => $this->volumeSeries($from, $to, $assessments, $results),
+            'slices' => $this->volumeSlices($groupBy, $assessments, $results),
+        ]);
     }
 
     /**
@@ -273,5 +318,138 @@ class ReportsController extends Controller
             'converted' => $converted->count(),
             'rate' => $leadOrders->count() > 0 ? round(100 * $converted->count() / $leadOrders->count(), 1) : null,
         ];
+    }
+
+    /** @return array{0: string, 1: string} [from, to], defaulting to [start of this month, today] */
+    private function volumeWindow(Request $request): array
+    {
+        $from = $request->query('from', now()->startOfMonth()->toDateString());
+        $to = $request->query('to', now()->toDateString());
+
+        return [$from, $to];
+    }
+
+    private function volumeGroupBy(Request $request): string
+    {
+        $groupBy = $request->query('group_by', 'language');
+
+        return in_array($groupBy, self::VOLUME_GROUP_BY, true) ? $groupBy : 'language';
+    }
+
+    /**
+     * One entry per calendar day across [$from, $to] inclusive, zero-filled.
+     * Always a straight daily total, independent of group_by.
+     *
+     * @param  Collection<int, Assessment>  $assessments
+     * @param  Collection<int, ScoredResult>  $results
+     * @return list<array{date: string, created: int, scored: int}>
+     */
+    private function volumeSeries(string $from, string $to, Collection $assessments, Collection $results): array
+    {
+        $createdByDay = [];
+        foreach ($assessments as $assessment) {
+            $day = $assessment->created_at->toDateString();
+            $createdByDay[$day] = ($createdByDay[$day] ?? 0) + 1;
+        }
+
+        $scoredByDay = [];
+        foreach ($results as $result) {
+            $day = $result->scored_at->toDateString();
+            $scoredByDay[$day] = ($scoredByDay[$day] ?? 0) + 1;
+        }
+
+        $series = [];
+        $cursor = CarbonImmutable::parse($from)->startOfDay();
+        $end = CarbonImmutable::parse($to)->startOfDay();
+        while ($cursor->lte($end)) {
+            $day = $cursor->toDateString();
+            $series[] = [
+                'date' => $day,
+                'created' => $createdByDay[$day] ?? 0,
+                'scored' => $scoredByDay[$day] ?? 0,
+            ];
+            $cursor = $cursor->addDay();
+        }
+
+        return $series;
+    }
+
+    /**
+     * Slice breakdown for the requested group_by. Scope is scored-results
+     * only (creation has no scope, so 'created' is always 0 there); the
+     * other dimensions merge assessment-created and result-scored counts
+     * under the same key, keyed off the owning assessment's attributes.
+     *
+     * @param  Collection<int, Assessment>  $assessments
+     * @param  Collection<int, ScoredResult>  $results
+     * @return list<array{key: string, label: string, created: int, scored: int}>
+     */
+    private function volumeSlices(string $groupBy, Collection $assessments, Collection $results): array
+    {
+        if ($groupBy === 'scope') {
+            return $this->volumeScopeSlices($results);
+        }
+
+        $slices = [];
+        foreach ($assessments as $assessment) {
+            [$key, $label] = $this->volumeSliceKey($groupBy, $assessment);
+            $slices[$key] ??= ['key' => $key, 'label' => $label, 'created' => 0, 'scored' => 0];
+            $slices[$key]['created']++;
+        }
+        foreach ($results as $result) {
+            $assessment = $result->assessment;
+            if ($assessment === null) {
+                continue;
+            }
+            [$key, $label] = $this->volumeSliceKey($groupBy, $assessment);
+            $slices[$key] ??= ['key' => $key, 'label' => $label, 'created' => 0, 'scored' => 0];
+            $slices[$key]['scored']++;
+        }
+
+        $values = array_values($slices);
+        if ($groupBy === 'client') {
+            usort($values, fn ($a, $b) => $b['created'] <=> $a['created']);
+        } else {
+            usort($values, fn ($a, $b) => $a['key'] <=> $b['key']);
+        }
+
+        return $values;
+    }
+
+    /** @return array{0: string, 1: string} [key, label] */
+    private function volumeSliceKey(string $groupBy, Assessment $assessment): array
+    {
+        return match ($groupBy) {
+            'gender' => [$assessment->gender ?? 'unspecified', $assessment->gender ?? 'unspecified'],
+            'client' => [
+                (string) ($assessment->apiKey?->client_id ?? '0'),
+                $assessment->apiKey?->client?->name ?? '(no client)',
+            ],
+            default => [$assessment->language, $assessment->language],
+        };
+    }
+
+    /**
+     * Scope slices count a result once per scope it carries — a result
+     * scored with scopes ["mcs", "insights"] counts toward both. There is
+     * no creation-side concept of scope, so 'created' is always 0.
+     *
+     * @param  Collection<int, ScoredResult>  $results
+     * @return list<array{key: string, label: string, created: int, scored: int}>
+     */
+    private function volumeScopeSlices(Collection $results): array
+    {
+        $slices = [];
+        foreach ($results as $result) {
+            foreach (($result->scopes ?? []) as $scope) {
+                $slices[$scope] ??= ['key' => $scope, 'label' => $scope, 'created' => 0, 'scored' => 0];
+                $slices[$scope]['scored']++;
+            }
+        }
+
+        $values = array_values($slices);
+        usort($values, fn ($a, $b) => $a['key'] <=> $b['key']);
+
+        return $values;
     }
 }

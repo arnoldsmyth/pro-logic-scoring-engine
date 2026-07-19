@@ -1,4 +1,6 @@
 import { useState, type ComponentType } from 'react'
+import AssessmentVolume from './AssessmentVolume'
+import PayoutAging from './PayoutAging'
 import RoyaltyStatement from './RoyaltyStatement'
 
 /**
@@ -15,7 +17,8 @@ type ReportTab = {
 
 const REPORTS: ReportTab[] = [
   { key: 'royalties', label: 'Royalty statement', component: RoyaltyStatement },
-  { key: 'volume', label: 'Assessment volume', soon: true },
+  { key: 'aging', label: 'Payout aging', component: PayoutAging },
+  { key: 'volume', label: 'Assessment volume', component: AssessmentVolume },
   { key: 'norms', label: 'Norm health', soon: true },
 ]
 

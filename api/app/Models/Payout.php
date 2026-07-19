@@ -23,6 +23,8 @@ class Payout extends Model
     {
         return [
             'created_at' => 'datetime',
+            'paid_at' => 'datetime',
+            'voided_at' => 'datetime',
         ];
     }
 
@@ -39,5 +41,10 @@ class Payout extends Model
     public function payoutTerm(): BelongsTo
     {
         return $this->belongsTo(PayoutTerm::class);
+    }
+
+    public function transitionedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'transitioned_by');
     }
 }
