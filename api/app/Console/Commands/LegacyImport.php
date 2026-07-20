@@ -24,11 +24,25 @@ class LegacyImport extends Command
     protected $description = 'Import legacy TMS config extracts (rules, matrices, norms, content) into the database';
 
     /**
-     * Never imported: WebServiceUsers holds live partner credentials and is
-     * not scoring config (rotate-at-cutover, docs/01). Files starting with
-     * "_" are extraction metadata.
+     * Never imported: legacy accounts/partners/comms, not scoring config.
+     * v2 is a clean start — new clients, keys, and users are created fresh
+     * in the panel, never carried over from the legacy system.
+     * WebServiceUsers additionally holds live partner credentials
+     * (rotate-at-cutover, docs/01). Files starting with "_" are extraction
+     * metadata. Confirmed unreferenced anywhere in app/ before excluding.
      */
-    private const EXCLUDED = ['WebServiceUsers'];
+    private const EXCLUDED = [
+        'WebServiceUsers',
+        'ApiPartner',
+        'WebEmail',
+        'WebEmailType',
+        'ReportTemplate',
+        'DeliveryType',
+        'DeliveryVersionControlProject',
+        'VersionControl',
+        'ToolVersionControl',
+        'Toolsub',
+    ];
 
     public function handle(): int
     {
