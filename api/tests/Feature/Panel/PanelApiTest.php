@@ -42,11 +42,16 @@ class PanelApiTest extends TestCase
         $this->postJson('/panel/api/login', ['email' => 'admin@example.com', 'password' => 'wrong'])
             ->assertStatus(422);
 
-        $this->postJson('/panel/api/login', ['email' => 'admin@example.com', 'password' => 'secret-123'])
+        $response = $this->postJson('/panel/api/login', ['email' => 'admin@example.com', 'password' => 'secret-123'])
             ->assertOk()
             ->assertJsonPath('user.role', 'admin');
 
         $this->getJson('/panel/api/me')->assertOk()->assertJsonPath('user.email', 'admin@example.com');
+
+        // Sensitive panel — no remember-me cookie. Sessions must actually
+        // expire per SESSION_LIFETIME, not persist indefinitely.
+        $cookieNames = collect($response->headers->getCookies())->map(fn ($c) => $c->getName());
+        $this->assertTrue($cookieNames->every(fn ($name) => ! str_starts_with($name, 'remember_web_')));
     }
 
     public function test_panel_requires_login(): void

@@ -21,7 +21,9 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        if (! Auth::attempt($credentials, remember: true)) {
+        // No remember-me: sessions must actually expire (SESSION_LIFETIME) —
+        // this panel handles sensitive client/financial data.
+        if (! Auth::attempt($credentials)) {
             return response()->json(['error' => ['code' => 'invalid_credentials', 'message' => 'Email or password is wrong.']], 422);
         }
 
