@@ -113,6 +113,11 @@ export default function CodeNew() {
             </Field>
             <Field label="Count">
               <input className={inputClass} type="number" min="1" max="500" value={form.count} onChange={(e) => setForm({ ...form, count: e.target.value })} />
+              <p className="mt-1 text-xs text-gray-400">
+                Generates this many separate codes at once (e.g. 5 → 5 unique codes), each independently redeemable —
+                not one code reusable that many times. For a single code that can be used repeatedly, leave this at 1
+                and set "Max uses" on the code's detail page after creating it.
+              </p>
             </Field>
           </div>
 
